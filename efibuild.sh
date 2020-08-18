@@ -8,7 +8,7 @@ BUILDDIR=$(pwd)
 prompt() {
   echo "$1"
   if [ "$FORCE_INSTALL" != "1" ]; then
-    read -rp "Enter [Y]es to continue: " v
+    read -rp "输入 [Y]es 继续: " v
     if [ "$v" != "Y" ] && [ "$v" != "y" ]; then
       exit 1
     fi
@@ -17,14 +17,15 @@ prompt() {
 
 updaterepo() {
   if [ ! -d "$2" ]; then
-    git clone --recursive "$1" -b "$3" --depth=1 "$2" || exit 1
+   echo "开始下载/更新UDK资源,资源文件较大，根据你的网速会有不同的完成速度，请耐心等候..."
+    gitme clone --recursive "$1" -b "$3" --depth=1 "$2"  || exit 1
   fi
   pushd "$2" >/dev/null || exit 1
   git pull
   if [ "$2" != "UDK" ] && [ "$(unamer)" != "Windows" ]; then
     sym=$(find . -not -type d -exec file "{}" ";" | grep CRLF)
     if [ "${sym}" != "" ]; then
-      echo "Repository $1 named $2 contains CRLF line endings"
+      echo "名为 $2 的存储库 $1 包含CRLF行结尾"
       echo "$sym"
       exit 1
     fi
@@ -33,7 +34,7 @@ updaterepo() {
 }
 
 abortbuild() {
-  echo "Build failed!"
+  echo "构建失败!"
   tail -120 build.log
   exit 1
 }
@@ -54,8 +55,25 @@ pingme() {
   ## https://github.com/koalaman/shellcheck/wiki/SC2028
   ## https://github.com/koalaman/shellcheck/wiki/SC2145
   # shellcheck disable=SC2028,SC2145
-  echo "\n\033[31;1mTimeout reached. Terminating $@.\033[0m"
+  echo "\n\033[31;1m超时了. 终止... $@.\033[0m"
   kill -9 "${cmd_pid}"
+  }
+
+star(){
+i=0;
+str=""
+arr=("|" "/" "-" "\\")
+while true
+do
+  let index=i%4
+  let indexcolor=i%8
+  let color=30+indexcolor
+  printf "[%-s %c\r" "" "" "${arr[$index]}"
+  sleep 0.2
+  let i++
+  str+='#'
+done
+printf "\n"
 }
 
 buildme() {
@@ -66,13 +84,50 @@ buildme() {
   build "$@" &>build.log &
   cmd_pid=$!
 
-  pingme $! build "$@" &
+  star $! build "$@" &
   mon_pid=$!
 
   ## ShellCheck Exception(s)
   ## https://github.com/koalaman/shellcheck/wiki/SC2069
   # shellcheck disable=SC2069
   { wait $cmd_pid 2>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill $mon_pid; } || return 1
+  return $result
+}
+
+gitme() {
+  local cmd_pid
+  local mon_pid
+  local result
+
+  git "$@" &>/dev/null &
+  cmd_pid=$!
+  trap "kill -9 $cmd_pid" INT
+
+  star $! git "$@" &
+  mon_pid=$!
+
+  ## ShellCheck Exception(s)
+  ## https://github.com/koalaman/shellcheck/wiki/SC2069
+  # shellcheck disable=SC2069
+  { wait $cmd_pid &>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill $mon_pid 2>&1>/dev/null; } || return 1
+  return $result
+}
+makeme() {
+  local cmd_pid
+  local mon_pid
+  local result
+
+  make "$@" &>/dev/null &
+  cmd_pid=$!
+  trap "kill -9 $cmd_pid" INT
+
+  star $! make "$@" &
+  mon_pid=$!
+
+  ## ShellCheck Exception(s)
+  ## https://github.com/koalaman/shellcheck/wiki/SC2069
+  # shellcheck disable=SC2069
+  { wait $cmd_pid &>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill $mon_pid 2>&1>/dev/null; } || return 1
   return $result
 }
 
@@ -103,7 +158,7 @@ unamer() {
   fi
 }
 
-echo "Building on $(unamer)"
+echo "在 $(unamer) 上构建"
 
 if [ "$(unamer)" = "Windows" ]; then
   cmd <<< 'chcp 437'
@@ -111,7 +166,7 @@ if [ "$(unamer)" = "Windows" ]; then
 fi
 
 if [ "${SELFPKG}" = "" ]; then
-  echo "You are required to set SELFPKG variable!"
+  echo "您需要设置SELFPKG变量!"
   exit 1
 fi
 
@@ -120,23 +175,23 @@ if [ "${SELFPKG_DIR}" = "" ]; then
 fi
 
 if [ "${BUILDDIR}" != "$(printf "%s\n" "${BUILDDIR}")" ] ; then
-  echo "EDK2 build system may still fail to support directories with spaces!"
+  echo "EDK2构建系统可能仍然不能支持带空格的目录!"
   exit 1
 fi
 
 if [ "$(which git)" = "" ]; then
-  echo "Missing git, please install it!"
+  echo "缺少 git 命令, 请先安装它!"
   exit 1
 fi
 
 if [ "$(which zip)" = "" ]; then
-  echo "Missing zip, please install it!"
+  echo "缺少 zip 命令, 请先安装它!"
   exit 1
 fi
 
 if [ "$(unamer)" = "Darwin" ]; then
   if [ "$(which clang)" = "" ] || [ "$(clang -v 2>&1 | grep "no developer")" != "" ] || [ "$(git -v 2>&1 | grep "no developer")" != "" ]; then
-    echo "Missing Xcode tools, please install them!"
+    echo "缺少xcode工具，请先安装它们!"
     exit 1
   fi
 fi
@@ -147,21 +202,23 @@ if [ "$(unamer)" = "Windows" ]; then
 fi
 
 if [ "$(nasm -v)" = "" ] || [ "$(nasm -v | grep Apple)" != "" ]; then
-  echo "Missing or incompatible nasm!"
-  echo "Download the latest nasm from http://www.nasm.us/pub/nasm/releasebuilds"
-  echo "Current PATH: $PATH -- $(which nasm)"
+  echo "缺少或不兼容的nasm，请手工安装它!"
+  echo "从 from http://www.nasm.us/pub/nasm/releasebuilds 下载最新的nasm"
+  echo "当前路径: $PATH -- $(which nasm)"
   # On Darwin we can install prebuilt nasm. On Linux let users handle it.
   if [ "$(unamer)" = "Darwin" ]; then
-    prompt "Install last tested version automatically?"
+    prompt "自动安装最新测试版本?"
   else
     exit 1
   fi
   pushd /tmp >/dev/null || exit 1
   rm -rf nasm-mac64.zip
-  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/nasm-mac64.zip" || exit 1
+  echo "开始下载nasm...."
+  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/nasm-mac64.zip" || exit 1
   nasmzip=$(cat nasm-mac64.zip)
   rm -rf nasm-*
-  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/${nasmzip}" || exit 1
+  echo "开始下载nasm...."
+  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/${nasmzip}" || exit 1
   unzip -q "${nasmzip}" nasm*/nasm nasm*/ndisasm || exit 1
   sudo mkdir -p /usr/local/bin || exit 1
   sudo mv nasm*/nasm /usr/local/bin/ || exit 1
@@ -171,20 +228,20 @@ if [ "$(nasm -v)" = "" ] || [ "$(nasm -v | grep Apple)" != "" ]; then
 fi
 
 if [ "$(iasl -v)" = "" ]; then
-  echo "Missing iasl!"
-  echo "Download the latest iasl from https://acpica.org/downloads"
+  echo "缺少iasl!"
+  echo "从https://acpica.org/downloads下载最新的iasl"
   # On Darwin we can install prebuilt iasl. On Linux let users handle it.
   if [ "$(unamer)" = "Darwin" ]; then
-    prompt "Install last tested version automatically?"
+    prompt "是否自动安装上次测试的版本？"
   else
     exit 1
   fi
   pushd /tmp >/dev/null || exit 1
   rm -rf iasl-macosx.zip
-  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/iasl-macosx.zip" || exit 1
+  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/iasl-macosx.zip" || exit 1
   iaslzip=$(cat iasl-macosx.zip)
   rm -rf iasl
-  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/${iaslzip}" || exit 1
+  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/${iaslzip}" || exit 1
   unzip -q "${iaslzip}" iasl || exit 1
   sudo mkdir -p /usr/local/bin || exit 1
   sudo mv iasl /usr/local/bin/ || exit 1
@@ -192,10 +249,11 @@ if [ "$(iasl -v)" = "" ]; then
   popd >/dev/null || exit 1
 fi
 
-mtoc_hash=$(curl -L "https://github.com/acidanthera/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
+echo "校验mtoc的hash值...."
+mtoc_hash=$(curl -Ls "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
 
 if [ "${mtoc_hash}" = "" ]; then
-  echo "Cannot obtain the latest compatible mtoc hash!"
+  echo "无法获得最新的兼容mtoc hash!"
   exit 1
 fi
 
@@ -212,30 +270,32 @@ if [ "$(which mtoc)" != "" ]; then
   if [ "${mtoc_hash}" = "${mtoc_hash_user}" ]; then
     valid_mtoc=true
   elif [ "${IGNORE_MTOC_VERSION}" = "1" ]; then
-    echo "Forcing the use of UNKNOWN mtoc version due to IGNORE_MTOC_VERSION=1"
+    echo "强制使用未知的mtoc版本,由于 IGNORE_MTOC_VERSION=1"
     valid_mtoc=true
   elif [ "${mtoc_path}" != "/usr/local/bin/mtoc" ]; then
-    echo "Custom UNKNOWN mtoc is installed to ${mtoc_path}!"
-    echo "Hint: Remove this mtoc or use IGNORE_MTOC_VERSION=1 at your own risk."
+    echo "自定义未知mtoc安装到 ${mtoc_path}!"
+    echo "提示:删除此mtoc或使用 IGNORE_MTOC_VERSION=1，风险自负."
     exit 1
   else
-    echo "Found incompatible mtoc installed to ${mtoc_path}!"
-    echo "Expected SHA-256: ${mtoc_hash}"
-    echo "Found SHA-256:    ${mtoc_hash_user}"
-    echo "Hint: Reinstall this mtoc or use IGNORE_MTOC_VERSION=1 at your own risk."
+    echo "发现安装到不兼容的mtoc ${mtoc_path}!"
+    echo "预期的SHA-256: ${mtoc_hash}"
+    echo "找到的SHA-256:    ${mtoc_hash_user}"
+    echo "提示:重新安装此mtoc或使用 IGNORE_MTOC_VERSION=1，风险自负."
   fi
 fi
 
 if ! $valid_mtoc; then
-  echo "Missing or incompatible mtoc!"
-  echo "To build mtoc follow: https://github.com/tianocore/tianocore.github.io/wiki/Xcode#mac-os-x-xcode"
-  prompt "Install prebuilt mtoc automatically?"
+  echo "mtoc缺失或不兼容!"
+  echo "要构建mtoc，请遵循以下步骤: https://github.com/tianocore/tianocore.github.io/wiki/Xcode#mac-os-x-xcode"
+  prompt "自动安装预构建的mtoc？"
   pushd /tmp >/dev/null || exit 1
   rm -f mtoc mtoc-mac64.zip
-  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/mtoc-mac64.zip" || exit 1
+  echo "开始下载mtoc......"
+  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.zip" || exit 1
   mtoczip=$(cat mtoc-mac64.zip)
   rm -rf mtoc-*
-  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/${mtoczip}" || exit 1
+  echo "开始下载nasm...."
+  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/${mtoczip}" || exit 1
   unzip -q "${mtoczip}" mtoc || exit 1
   sudo mkdir -p /usr/local/bin || exit 1
   sudo rm -f /usr/local/bin/mtoc /usr/local/bin/mtoc.NEW || exit 1
@@ -245,9 +305,9 @@ if ! $valid_mtoc; then
   mtoc_path=$(which mtoc)
   mtoc_hash_user=$(shasum -a 256 "${mtoc_path}" | cut -d' ' -f1)
   if [ "${mtoc_hash}" != "${mtoc_hash_user}" ]; then
-    echo "Failed to install a compatible version of mtoc!"
-    echo "Expected SHA-256: ${mtoc_hash}"
-    echo "Found SHA-256:    ${mtoc_hash_user}"
+    echo "未能安装兼容的mtoc版本!"
+    echo "预期的 SHA-256: ${mtoc_hash}"
+    echo "发现的 SHA-256:    ${mtoc_hash_user}"
     exit 1
   fi
 fi
@@ -303,7 +363,7 @@ if [ "$1" != "" ]; then
   shift
 fi
 
-echo "Primary toolchain ${TOOLCHAINS[0]} and arch ${ARCHS[0]}"
+echo "主工具链是: ${TOOLCHAINS[0]} |  架构：${ARCHS[0]}"
 
 if [ ! -d "Binaries" ]; then
   mkdir Binaries || exit 1
@@ -315,25 +375,26 @@ if [ ! -f UDK/UDK.ready ]; then
   if [ "$(unamer)" != "Windows" ]; then
     sym=$(find . -not -type d -exec file "{}" ";" | grep CRLF)
     if [ "${sym}" != "" ]; then
-      echo "Error: the following files in the repository CRLF line endings:"
+      echo "错误:以下文件在存储库CRLF行结束:"
       echo "$sym"
       exit 1
     fi
   fi
 fi
 
-updaterepo "https://github.com/acidanthera/audk" UDK master || exit 1
+updaterepo "https://gitee.com/btwise/audk" UDK master || exit 1
 cd UDK || exit 1
 HASH=$(git rev-parse origin/master)
 
 if [ -d ../Patches ]; then
   if [ ! -f patches.ready ]; then
-    git config user.name ocbuild
-    git config user.email ocbuild@acidanthera.local
+    git config user.name btwise
+    git config user.email tyq@qq.com
     for i in ../Patches/* ; do
-      git apply --ignore-whitespace "$i" || exit 1
+     echo "修补EDK模块..."
+      git apply --ignore-whitespace "$i" >/dev/null || exit 1
       git add .
-      git commit -m "Applied patch $i" || exit 1
+      git commit -m "Applied patch $i" >/dev/null || exit 1
     done
     touch patches.ready
   fi
@@ -349,10 +410,11 @@ if [ ! -e "${SELFPKG_DIR}" ]; then
   symlink .. "${SELFPKG_DIR}" || exit 1
 fi
 
-source edksetup.sh || exit 1
+echo "构建UDK工作环境...."
+source edksetup.sh >/dev/null || exit 1
 
 if [ "$SKIP_TESTS" != "1" ]; then
-  echo "Testing..."
+  echo "测试中..."
   if [ "$(unamer)" = "Windows" ]; then
     # Configure Visual Studio environment. Requires:
     # 1. choco install microsoft-build-tools visualcpp-build-tools nasm zip
@@ -360,7 +422,7 @@ if [ "$SKIP_TESTS" != "1" ]; then
     tools="${EDK_TOOLS_PATH}"
     tools="${tools//\//\\}"
     tools="${tools/\\c\\/C:\\}"
-    echo "Expanded EDK_TOOLS_PATH from ${EDK_TOOLS_PATH} to ${tools}"
+    echo "将 EDK_TOOLS_PATH 从 ${EDK_TOOLS_PATH} 扩展为 ${tools}"
     export EDK_TOOLS_PATH="${tools}"
     export BASE_TOOLS_PATH="${tools}"
     VS2017_BUILDTOOLS="C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\BuildTools"
@@ -374,7 +436,7 @@ if [ "$SKIP_TESTS" != "1" ]; then
     # shellcheck disable=SC2035
     VS2017_DIR="$(find * -maxdepth 0 -type d -print -quit)"
     if [ "${VS2017_DIR}" = "" ]; then
-      echo "No VS2017 MSVC compiler"
+      echo "没有 VS2017 MSVC 编译器"
       exit 1
     fi
     cd - || exit 1
@@ -394,7 +456,7 @@ if [ "$SKIP_TESTS" != "1" ]; then
     if [ "${WINSDK_PATH_FOR_RC_EXE}" != "" ]; then
       export WINSDK_PATH_FOR_RC_EXE
     else
-      echo "Failed to find rc.exe"
+      echo "找不到rc.exe"
       exit 1
     fi
     BASE_TOOLS="$(pwd)/BaseTools"
@@ -416,20 +478,28 @@ for k,v in envs.items():
     nmake        || exit 1
     cd ..        || exit 1
   else
-    make -C BaseTools -j || exit 1
+  echo "构建EDK环境..."
+    star&
+    BG_PID=$!
+    trap "kill -9 $BG_PID" INT
+    makeme -C BaseTools -j || exit 1
+    sleep 50
+    kill $BG_PID &>/dev/null
   fi
   touch UDK.ready
+  echo -e "----------------------------------------------------------------\n"
 fi
 
 if [ "$SKIP_BUILD" != "1" ]; then
-  echo "Building..."
+  echo "开始编译..."
   for arch in "${ARCHS[@]}" ; do
     for toolchain in "${TOOLCHAINS[@]}" ; do
       for target in "${TARGETS[@]}" ; do
         if [ "$MODE" = "" ] || [ "$MODE" = "$target" ]; then
-          echo "Building ${SELFPKG_DIR}/${SELFPKG}.dsc for $arch in $target with ${toolchain}..."
+          echo -e "使用${toolchain}工具链编译${SELFPKG_DIR}/${SELFPKG}.dsc...\n版本:$target\n架构:$arch"
           buildme -a "$arch" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" || abortbuild
-          echo " - OK"
+          echo -e "\n编译完成!!"
+          echo -e "----------------------------------------------------------------"
         fi
       done
     done
@@ -437,18 +507,18 @@ if [ "$SKIP_BUILD" != "1" ]; then
 fi
 
 cd .. || exit 1
-
+echo -e "****************************************************************\n"
 if [ "$(type -t package)" = "function" ]; then
   if [ "$SKIP_PACKAGE" != "1" ]; then
-    echo "Packaging..."
+    echo "打包中..."
     if [ "$NO_ARCHIVES" != "1" ]; then
       rm -f Binaries/*.zip
     fi
     for rtarget in "${RTARGETS[@]}" ; do
       if [ "$PACKAGE" = "" ] || [ "$PACKAGE" = "$rtarget" ]; then
-        package "UDK/Build/${RELPKG}/${rtarget}_${TOOLCHAINS[0]}/${ARCHS[0]}" "$rtarget" "$HASH" || exit 1
+        package "UDK/Build/${RELPKG}/${rtarget}_${TOOLCHAINS[0]}/${ARCHS[0]}" "$rtarget" "$HASH" &>/dev/null || exit 1
         if [ "$NO_ARCHIVES" != "1" ]; then
-          cp "UDK/Build/${RELPKG}/${rtarget}_${TOOLCHAINS[0]}/${ARCHS[0]}"/*.zip Binaries || echo skipping
+          cp "UDK/Build/${RELPKG}/${rtarget}_${TOOLCHAINS[0]}/${ARCHS[0]}"/*.zip Binaries &>/dev/null || echo skipping
         fi
       fi
     done
