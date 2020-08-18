@@ -68,7 +68,7 @@ do
   let index=i%4
   let indexcolor=i%8
   let color=30+indexcolor
-  printf "->%-s %c\r" "" "" "${arr[$index]}"
+  printf ">%-s %c\r" "" "" "${arr[$index]}"
   sleep 0.2
   let i++
   str+='#'
