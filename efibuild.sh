@@ -198,7 +198,7 @@ fi
 
 # On Windows nasm and python may not be in PATH.
 if [ "$(unamer)" = "Windows" ]; then
-  export PATH="/c/Python38:$PATH:/c/Program Files/NASM"
+  export PATH="/c/Python38:$PATH:/c/Program Files/NASM:/c/tools/ASL"
 fi
 
 if [ "$(nasm -v)" = "" ] || [ "$(nasm -v | grep Apple)" != "" ]; then
@@ -250,9 +250,10 @@ if [ "$(iasl -v)" = "" ]; then
 fi
 
 echo "校验mtoc的hash值...."
-mtoc_hash=$(curl -Ls "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
+if [ "${MTOC_HASH}" = "" ]; then
+MTOC_HASH=$(curl -Ls "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
 
-if [ "${mtoc_hash}" = "" ]; then
+if [ "${MTOC_HASH}" = "" ]; then
   echo "无法获得最新的兼容mtoc hash!"
   exit 1
 fi
