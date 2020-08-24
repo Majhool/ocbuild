@@ -251,7 +251,8 @@ fi
 
 echo "校验mtoc的hash值...."
 if [ "${MTOC_HASH}" = "" ]; then
-MTOC_HASH=$(curl -Ls "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
+  MTOC_HASH=$(curl -Ls "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
+fi
 
 if [ "${MTOC_HASH}" = "" ]; then
   echo "无法获得最新的兼容mtoc hash!"
