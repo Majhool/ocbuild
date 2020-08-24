@@ -269,7 +269,7 @@ fi
 if [ "$(which mtoc)" != "" ]; then
   mtoc_path=$(which mtoc)
   mtoc_hash_user=$(shasum -a 256 "${mtoc_path}" | cut -d' ' -f1)
-  if [ "${mtoc_hash}" = "${mtoc_hash_user}" ]; then
+  if [ "${MTOC_HASH}" = "${mtoc_hash_user}" ]; then
     valid_mtoc=true
   elif [ "${IGNORE_MTOC_VERSION}" = "1" ]; then
     echo "强制使用未知的mtoc版本,由于 IGNORE_MTOC_VERSION=1"
@@ -280,7 +280,7 @@ if [ "$(which mtoc)" != "" ]; then
     exit 1
   else
     echo "发现安装到不兼容的mtoc ${mtoc_path}!"
-    echo "预期的SHA-256: ${mtoc_hash}"
+    echo "预期的SHA-256: ${MTOC_HASH}"
     echo "找到的SHA-256:    ${mtoc_hash_user}"
     echo "提示:重新安装此mtoc或使用 IGNORE_MTOC_VERSION=1，风险自负."
   fi
@@ -306,9 +306,9 @@ if ! $valid_mtoc; then
 
   mtoc_path=$(which mtoc)
   mtoc_hash_user=$(shasum -a 256 "${mtoc_path}" | cut -d' ' -f1)
-  if [ "${mtoc_hash}" != "${mtoc_hash_user}" ]; then
+  if [ "${MTOC_HASH}" != "${mtoc_hash_user}" ]; then
     echo "未能安装兼容的mtoc版本!"
-    echo "预期的 SHA-256: ${mtoc_hash}"
+    echo "预期的 SHA-256: ${MTOC_HASH}"
     echo "发现的 SHA-256:    ${mtoc_hash_user}"
     exit 1
   fi
