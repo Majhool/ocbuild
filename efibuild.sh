@@ -18,7 +18,9 @@ prompt() {
 updaterepo() {
   if [ ! -d "$2" ]; then
    echo "开始下载/更新UDK资源,资源文件较大，根据你的网速会有不同的完成速度，请耐心等候..."
-    gitme clone --recursive "$1" -b "$3" --depth=1 "$2"  || exit 1
+#     gitme clone --recursive "$1" -b "$3" --depth=1 "$2"  || exit 1
+    gitme clone "$1" -b "$3" --depth=1 "$2" || exit 1
+
   fi
   pushd "$2" >/dev/null || exit 1
   git pull
@@ -30,6 +32,8 @@ updaterepo() {
       exit 1
     fi
   fi
+echo "更新UDK子模块内容,资源文件较大，根据你的网速会有不同的完成速度，请耐心等候..."
+  gitme submodule update --init --recommend-shallow || exit 1
   popd >/dev/null || exit 1
 }
 
@@ -158,7 +162,7 @@ unamer() {
   fi
 }
 
-echo "在 $(unamer) 上构建"
+echo "在 $(unamer) 平台上构建"
 
 if [ "$(unamer)" = "Windows" ]; then
   cmd <<< 'chcp 437'
@@ -481,12 +485,7 @@ for k,v in envs.items():
     cd ..        || exit 1
   else
   echo "构建EDK环境..."
-    star&
-    BG_PID=$!
-    trap "kill -9 $BG_PID" INT
     makeme -C BaseTools -j || exit 1
-    sleep 50
-    kill $BG_PID &>/dev/null
   fi
   touch UDK.ready
   echo -e "----------------------------------------------------------------\n"
