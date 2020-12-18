@@ -23,7 +23,7 @@ updaterepo() {
 
   fi
   pushd "$2" >/dev/null || exit 1
-  git pull
+  git pull --rebase --autostash
   if [ "$2" != "UDK" ] && [ "$(unamer)" != "Windows" ]; then
     sym=$(find . -not -type d -exec file "{}" ";" | grep CRLF)
     if [ "${sym}" != "" ]; then
@@ -338,9 +338,11 @@ fi
 
 if [ "$TARGETS" = "" ]; then
   TARGETS=('DEBUG' 'RELEASE' 'NOOPT')
+elif [ "${RTARGETS[*]}" = "" ]; then
+  RTARGETS=("${TARGETS[@]}")
 fi
 
-if [ "$RTARGETS" = "" ]; then
+if [ "${RTARGETS[*]}" = "" ]; then
   RTARGETS=('DEBUG' 'RELEASE')
 fi
 
@@ -396,6 +398,7 @@ if [ -d ../Patches ]; then
   if [ ! -f patches.ready ]; then
     git config user.name btwise
     git config user.email tyq@qq.com
+    git config commit.gpgsign false
     for i in ../Patches/* ; do
      echo "修补EDK模块..."
       git apply --ignore-whitespace "$i" >/dev/null || exit 1
@@ -427,8 +430,11 @@ if [ "$SKIP_TESTS" != "1" ]; then
     # 2. iasl in PATH for MdeModulePkg
     tools="${EDK_TOOLS_PATH}"
     tools="${tools//\//\\}"
+    # For Travis CI
     tools="${tools/\\c\\/C:\\}"
-    echo "将 EDK_TOOLS_PATH 从 ${EDK_TOOLS_PATH} 扩展为 ${tools}"
+    # For GitHub Actions
+    tools="${tools/\\d\\/D:\\}"
+    echo "将EDK_TOOLS_PATH从${EDK_TOOLS_PATH}扩展到${tools}"
     export EDK_TOOLS_PATH="${tools}"
     export BASE_TOOLS_PATH="${tools}"
     VS2017_BUILDTOOLS="C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\BuildTools"
