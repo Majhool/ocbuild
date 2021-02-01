@@ -1,5 +1,5 @@
 #!/bin/bash
-
+set -x
 unset WORKSPACE
 unset PACKAGES_PATH
 
