@@ -502,7 +502,7 @@ if [ "$SKIP_BUILD" != "1" ]; then
       for target in "${TARGETS[@]}" ; do
         if [ "$MODE" = "" ] || [ "$MODE" = "$target" ]; then
           echo -e "使用${toolchain}工具链编译${SELFPKG_DIR}/${SELFPKG}.dsc...\n版本:$target\n架构:$arch"
-          buildme -a "$arch" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" || abortbuild
+          buildme -a "$arch" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" >/dev/null || abortbuild
           echo -e "\n编译完成!!"
           echo -e "----------------------------------------------------------------"
         fi
@@ -527,7 +527,7 @@ if [ "$(type -t package)" = "function" ]; then
           else
             name="${toolchain}-${rtarget}"
           fi
-          package "UDK/Build/${RELPKG}/${rtarget}_${toolchain}/${ARCHS[0]}" "${name}" "${HASH}" || exit 1
+          package "UDK/Build/${RELPKG}/${rtarget}_${toolchain}/${ARCHS[0]}" "${name}" "${HASH}" >/dev/null || exit 1
           if [ "$NO_ARCHIVES" != "1" ]; then
             cp "UDK/Build/${RELPKG}/${rtarget}_${toolchain}/${ARCHS[0]}"/*.zip Binaries || echo skipping
           fi
