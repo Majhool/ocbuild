@@ -509,10 +509,10 @@ if [ "$SKIP_BUILD" != "1" ]; then
       for target in "${TARGETS[@]}" ; do
         if [ "$MODE" = "" ] || [ "$MODE" = "$target" ]; then
           if [ "${ARCHS_EXT[i]}" == "" ]; then
-            echo -e "使用 ${toolchain}工具链和 $BUILD_STRING 标志在 $target 中为 ${ARCHS[i]} 构建 ${SELFPKG_DIR}/${SELFPKG}.dsc ..."
+            echo -e "使用 ${toolchain} 工具链和$BUILD_STRING标志在 $target 版本中为 ${ARCHS[i]} 架构构建 ${SELFPKG_DIR}/${SELFPKG}.dsc ..."
             buildme -a "${ARCHS[i]}" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" "${BUILD_ARGUMENTS[@]}" || abortbuild
           else
-            echo "在 $target 中使用 ${toolchain} 和$BUILD_STRING标志 为 ${ARCHS_EXT[i]} 使用额外的架构 ${ARCHS_EXT[i]} 构建 ${SELFPKG_DIR}/${SELFPKG}.dsc  ..."
+            echo "在 $target 中使用 ${toolchain} 工具链和$BUILD_STRING标志为 ${ARCHS_EXT[i]} 使用额外的架构 ${ARCHS_EXT[i]} 构建 ${SELFPKG_DIR}/${SELFPKG}.dsc  ..."
             buildme -a "${ARCHS_EXT[i]}" -a "${ARCHS[i]}" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" "${BUILD_ARGUMENTS[@]}" || abortbuild
           fi
           echo -e "\n编译完成!!"
