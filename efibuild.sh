@@ -350,6 +350,7 @@ SKIP_TESTS=0
 SKIP_BUILD=0
 SKIP_PACKAGE=0
 MODE=""
+BUILD_ARGUMENTS=()
 
 while true; do
   if [ "$1" == "--skip-tests" ]; then
@@ -360,6 +361,12 @@ while true; do
     shift
   elif [ "$1" == "--skip-package" ]; then
     SKIP_PACKAGE=1
+    shift
+  elif [ "$1" == "--build-extra" ]; then
+    shift
+    BUILD_STRING="$1"
+    # shellcheck disable=SC2206
+    BUILD_ARGUMENTS=($BUILD_STRING)
     shift
   else
     break
@@ -418,7 +425,7 @@ done
 symlink .. "${SELFPKG_DIR}" || exit 1
 
 echo "构建UDK工作环境...."
-source edksetup.sh >/dev/null || exit 1
+. ./edksetup.sh >/dev/null || exit 1
 
 if [ "$SKIP_TESTS" != "1" ]; then
   echo "测试中..."
@@ -497,12 +504,17 @@ fi
 
 if [ "$SKIP_BUILD" != "1" ]; then
   echo "开始编译..."
-  for arch in "${ARCHS[@]}" ; do
+  for i in "${!ARCHS[@]}" ; do
     for toolchain in "${TOOLCHAINS[@]}" ; do
       for target in "${TARGETS[@]}" ; do
         if [ "$MODE" = "" ] || [ "$MODE" = "$target" ]; then
-          echo -e "使用${toolchain}工具链编译${SELFPKG_DIR}/${SELFPKG}.dsc...\n版本:$target\n架构:$arch"
-          buildme -a "$arch" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" >/dev/null || abortbuild
+          if [ "${ARCHS_EXT[i]}" == "" ]; then
+            echo -e "使用 ${toolchain}工具链和 $BUILD_STRING 标志在 $target 中为 ${ARCHS[i]} 构建 ${SELFPKG_DIR}/${SELFPKG}.dsc ..."
+            buildme -a "${ARCHS[i]}" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" "${BUILD_ARGUMENTS[@]}" || abortbuild
+          else
+            echo "在 $target 中使用 ${toolchain} 和$BUILD_STRING标志 为 ${ARCHS_EXT[i]} 使用额外的架构 ${ARCHS_EXT[i]} 构建 ${SELFPKG_DIR}/${SELFPKG}.dsc  ..."
+            buildme -a "${ARCHS_EXT[i]}" -a "${ARCHS[i]}" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" "${BUILD_ARGUMENTS[@]}" || abortbuild
+          fi
           echo -e "\n编译完成!!"
           echo -e "----------------------------------------------------------------"
         fi
