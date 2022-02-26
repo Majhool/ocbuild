@@ -25,7 +25,7 @@ updaterepo() {
   pushd "$2" >/dev/null || exit 1
   git pull --rebase --autostash
   if [ "$2" != "UDK" ] && [ "$(unamer)" != "Windows" ]; then
-    sym=$(find . -not -type d -exec file "{}" ";" | grep CRLF)
+    sym=$(find . -not -type d -not -path "./coreboot/*" -exec file "{}" ";" | grep CRLF)
     if [ "${sym}" != "" ]; then
       echo "名为 $2 的存储库 $1 包含CRLF行结尾"
       echo "$sym"
@@ -442,7 +442,7 @@ if [ "$SKIP_TESTS" != "1" ]; then
     echo "将EDK_TOOLS_PATH从${EDK_TOOLS_PATH}扩展到${tools}"
     export EDK_TOOLS_PATH="${tools}"
     export BASE_TOOLS_PATH="${tools}"
-    VS2019_BUILDTOOLS=$(vswhere -latest -version '[16.0,17.0)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+    VS2019_BUILDTOOLS=$(vswhere -latest -version '[16.0,17.1)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
     VS2019_BASEPREFIX="${VS2019_BUILDTOOLS}\\VC\\Tools\\MSVC\\"
     # Intended to use ls here to get first entry.
     # REF: https://github.com/koalaman/shellcheck/wiki/SC2012
