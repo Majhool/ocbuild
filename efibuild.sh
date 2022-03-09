@@ -121,7 +121,7 @@ makeme() {
   local mon_pid
   local result
 
-  #make "$@" &>/dev/null &
+  make "$@" &>/dev/null &
   cmd_pid=$!
   trap "kill -9 $cmd_pid" INT
 
