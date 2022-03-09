@@ -88,7 +88,8 @@ buildme() {
   build "$@" &>build.log &
   cmd_pid=$!
 
-  star $! build "$@" &
+#   star $! build "$@" &
+  build "$@" &
   mon_pid=$!
 
   ## ShellCheck Exception(s)
@@ -107,7 +108,8 @@ gitme() {
   cmd_pid=$!
   trap "kill -9 $cmd_pid" INT
 
-  star $! git "$@" &
+  # star $! git "$@" &
+  git "$@" &
   mon_pid=$!
 
   ## ShellCheck Exception(s)
@@ -125,7 +127,9 @@ makeme() {
   cmd_pid=$!
   trap "kill -9 $cmd_pid" INT
 
-  star $! make "$@" &
+#   star $! make "$@" &
+ make "$@" &
+
   mon_pid=$!
 
   ## ShellCheck Exception(s)
