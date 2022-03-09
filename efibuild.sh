@@ -126,7 +126,6 @@ makeme() {
   trap "kill -9 $cmd_pid" INT
 
   star $!
-  # && make "$@" & >/dev/null
   mon_pid=$!
 
   ## ShellCheck Exception(s)
