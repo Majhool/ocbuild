@@ -125,9 +125,7 @@ makeme() {
   cmd_pid=$!
   trap "kill -9 $cmd_pid" INT
 
-#   star $! make "$@" &
- make "$@" &
-
+  star $! make "$@" &
   mon_pid=$!
 
   ## ShellCheck Exception(s)
