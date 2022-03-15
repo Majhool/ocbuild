@@ -127,11 +127,10 @@ makeme() {
   local mon_pid
   local result
 
-  make "$@" &>/dev/null &
+  make "$@" &>make.log & > /dev/null
   cmd_pid=$!
-  trap "kill -9 $cmd_pid" INT
 
-  star $!  make "$@" & >/dev/null
+  star $!  make "$@" &
   mon_pid=$!
 
   ## ShellCheck Exception(s)
