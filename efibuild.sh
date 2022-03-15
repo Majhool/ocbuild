@@ -5,6 +5,14 @@ unset PACKAGES_PATH
 
 BUILDDIR=$(pwd)
 
+if [ "$NEW_BUILDSYSTEM" = "" ]; then
+  NEW_BUILDSYSTEM=0
+fi
+
+if [ "$OFFLINE_MODE" = "" ]; then
+  OFFLINE_MODE=0
+fi
+
 prompt() {
   echo "$1"
   if [ "$FORCE_INSTALL" != "1" ]; then
@@ -18,21 +26,19 @@ prompt() {
 updaterepo() {
   if [ ! -d "$2" ]; then
    echo "开始下载/更新UDK资源,资源文件较大，根据你的网速会有不同的完成速度，请耐心等候..."
-#     gitme clone --recursive "$1" -b "$3" --depth=1 "$2"  || exit 1
     gitme clone "$1" -b "$3" --depth=1 "$2" || exit 1
-
   fi
   pushd "$2" >/dev/null || exit 1
   git pull --rebase --autostash
   if [ "$2" != "UDK" ] && [ "$(unamer)" != "Windows" ]; then
-    sym=$(find . -not -type d -not -path "./coreboot/*" -exec file "{}" ";" | grep CRLF)
+    sym=$(find . -not -type d -not -path "./coreboot/*" -not -path "./UDK/*" -exec file "{}" ";" | grep CRLF)
     if [ "${sym}" != "" ]; then
       echo "名为 $2 的存储库 $1 包含CRLF行结尾"
       echo "$sym"
       exit 1
     fi
   fi
-echo "更新UDK子模块内容,资源文件较大，根据你的网速会有不同的完成速度，请耐心等候..."
+  echo "更新UDK子模块内容,资源文件较大，根据你的网速会有不同的完成速度，请耐心等候..."
   gitme submodule update --init --recommend-shallow || exit 1
   popd >/dev/null || exit 1
 }
@@ -386,122 +392,140 @@ if [ ! -d "Binaries" ]; then
   mkdir Binaries || exit 1
 fi
 
-if [ ! -f UDK/UDK.ready ]; then
-  rm -rf UDK
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ ! -f UDK/UDK.ready ]; then
+    rm -rf UDK
 
-  if [ "$(unamer)" != "Windows" ]; then
-    sym=$(find . -not -type d -exec file "{}" ";" | grep CRLF)
-    if [ "${sym}" != "" ]; then
-      echo "错误:以下文件在存储库CRLF行结束:"
-      echo "$sym"
-      exit 1
+    if [ "$(unamer)" != "Windows" ]; then
+      sym=$(find . -not -type d -not -path "./coreboot/*" -exec file "{}" ";" | grep CRLF)
+      if [ "${sym}" != "" ]; then
+        echo "错误：存储库中的以下文件 CRLF 行结尾:"
+        echo "$sym"
+        exit 1
+      fi
     fi
   fi
 fi
 
-updaterepo "https://codechina.csdn.net/btwise/audk.git" UDK master || exit 1
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ "$OFFLINE_MODE" != "1" ]; then
+    updaterepo "https://codechina.csdn.net/btwise/audk.git" UDK master || exit 1
+  else
+    echo "在离线模式下工作。跳过 UDK 更新"
+  fi
+fi
 cd UDK || exit 1
 HASH=$(git rev-parse origin/master)
 
-if [ -d ../Patches ]; then
-  if [ ! -f patches.ready ]; then
-    git config user.name btwise
-    git config user.email tyq@qq.com
-    git config commit.gpgsign false
-    for i in ../Patches/* ; do
-     echo "修补EDK模块..."
-      git apply --ignore-whitespace "$i" >/dev/null || exit 1
-      git add .
-      git commit -m "Applied patch $i" >/dev/null || exit 1
-    done
-    touch patches.ready
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ -d ../Patches ]; then
+    if [ ! -f patches.ready ]; then
+      git config user.name btwise
+      git config user.email tyq@qq.com
+      git config commit.gpgsign false
+      for i in ../Patches/* ; do
+        git apply --ignore-whitespace "$i" >/dev/null || exit 1
+        git add .
+        git commit -m "Applied patch $i" >/dev/null || exit 1
+      done
+      touch patches.ready
+    fi
   fi
 fi
 
 deps="${#DEPNAMES[@]}"
 for (( i=0; i<deps; i++ )) ; do
-  updaterepo "${DEPURLS[$i]}" "${DEPNAMES[$i]}" "${DEPBRANCHES[$i]}" || exit 1
+  echo "正在更新 ${DEPNAMES[$i]}"
+  if [ "$OFFLINE_MODE" != "1" ]; then
+    updaterepo "${DEPURLS[$i]}" "${DEPNAMES[$i]}" "${DEPBRANCHES[$i]}" || exit 1
+  else
+    echo "在离线模式下工作. 跳过 ${DEPNAMES[$i]} 更新"
+  fi
+
 done
 
-# Allow building non-self packages.
-symlink .. "${SELFPKG_DIR}" || exit 1
-
-echo "构建UDK工作环境...."
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  # 允许构建非自我包.
+  symlink .. "${SELFPKG_DIR}" || exit 1
+fi
+echo "正在设置EDK工作空间..."
 . ./edksetup.sh >/dev/null || exit 1
 
-if [ "$SKIP_TESTS" != "1" ]; then
-  echo "测试中..."
-  if [ "$(unamer)" = "Windows" ]; then
-    # Configure Visual Studio environment. Requires:
-    # 1. choco install vswhere microsoft-build-tools visualcpp-build-tools nasm zip
-    # 2. iasl in PATH for MdeModulePkg
-    tools="${EDK_TOOLS_PATH}"
-    tools="${tools//\//\\}"
-    # For Travis CI
-    tools="${tools/\\c\\/C:\\}"
-    # For GitHub Actions
-    tools="${tools/\\d\\/D:\\}"
-    echo "将EDK_TOOLS_PATH从${EDK_TOOLS_PATH}扩展到${tools}"
-    export EDK_TOOLS_PATH="${tools}"
-    export BASE_TOOLS_PATH="${tools}"
-    VS2019_BUILDTOOLS=$(vswhere -latest -version '[16.0,17.1)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
-    VS2019_BASEPREFIX="${VS2019_BUILDTOOLS}\\VC\\Tools\\MSVC\\"
-    # Intended to use ls here to get first entry.
-    # REF: https://github.com/koalaman/shellcheck/wiki/SC2012
-    # shellcheck disable=SC2012
-    cd "${VS2019_BASEPREFIX}" || exit 1
-    # Incorrect diagnostic due to action.
-    # REF: https://github.com/koalaman/shellcheck/wiki/SC2035
-    # shellcheck disable=SC2035
-    VS2019_DIR="$(find * -maxdepth 0 -type d -print -quit)"
-    if [ "${VS2019_DIR}" = "" ]; then
-      echo "没有 VS2019 MSVC 编译器"
-      exit 1
-    fi
-    cd - || exit 1
-    export VS2019_PREFIX="${VS2019_BASEPREFIX}${VS2019_DIR}\\"
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ "$SKIP_TESTS" != "1" ]; then
+    echo "Testing..."
+    if [ "$(unamer)" = "Windows" ]; then
+      # 配置 Visual Studio 环境. 需要:
+      # 1. choco install vswhere microsoft-build-tools visualcpp-build-tools nasm zip
+      # 2. 用于 MdeModulePkg 的在环境变量中的 iasl
+      tools="${EDK_TOOLS_PATH}"
+      tools="${tools//\//\\}"
+      # For Travis CI
+      tools="${tools/\\c\\/C:\\}"
+      # For GitHub Actions
+      tools="${tools/\\d\\/D:\\}"
+      echo "将 EDK_TOOLS_PATH 从 ${EDK_TOOLS_PATH} 扩展到 ${tools}"
+      export EDK_TOOLS_PATH="${tools}"
+      export BASE_TOOLS_PATH="${tools}"
+      VS2019_BUILDTOOLS=$(vswhere -latest -version '[16.0,17.1)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+      VS2019_BASEPREFIX="${VS2019_BUILDTOOLS}\\VC\\Tools\\MSVC\\"
+      # 打算在这里使用 ls 来获得第一个条目.
+      # REF: https://github.com/koalaman/shellcheck/wiki/SC2012
+      # shellcheck disable=SC2012
+      cd "${VS2019_BASEPREFIX}" || exit 1
+      # Incorrect diagnostic due to action.
+      # REF: https://github.com/koalaman/shellcheck/wiki/SC2035
+      # shellcheck disable=SC2035
+      VS2019_DIR="$(find * -maxdepth 0 -type d -print -quit)"
+      if [ "${VS2019_DIR}" = "" ]; then
+        echo "没有 VS2019 MSVC 编译器"
+        exit 1
+      fi
+      cd - || exit 1
+      export VS2019_PREFIX="${VS2019_BASEPREFIX}${VS2019_DIR}\\"
 
-    WINSDK_BASE="/c/Program Files (x86)/Windows Kits/10/bin"
-    if [ -d "${WINSDK_BASE}" ]; then
-      for dir in "${WINSDK_BASE}"/*/; do
-        if [ -f "${dir}x86/rc.exe" ]; then
-          WINSDK_PATH_FOR_RC_EXE="${dir}x86/rc.exe"
-          WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE//\//\\}"
-          WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE/\\c\\/C:\\}"
-          break
-        fi
-      done
-    fi
-    if [ "${WINSDK_PATH_FOR_RC_EXE}" != "" ]; then
-      export WINSDK_PATH_FOR_RC_EXE
+      WINSDK_BASE="/c/Program Files (x86)/Windows Kits/10/bin"
+      if [ -d "${WINSDK_BASE}" ]; then
+        for dir in "${WINSDK_BASE}"/*/; do
+          if [ -f "${dir}x86/rc.exe" ]; then
+            WINSDK_PATH_FOR_RC_EXE="${dir}x86/rc.exe"
+            WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE//\//\\}"
+            WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE/\\c\\/C:\\}"
+            break
+          fi
+        done
+      fi
+      if [ "${WINSDK_PATH_FOR_RC_EXE}" != "" ]; then
+        export WINSDK_PATH_FOR_RC_EXE
+      else
+        echo "找不到 rc.exe"
+        exit 1
+      fi
+      BASE_TOOLS="$(pwd)/BaseTools"
+      export PATH="${BASE_TOOLS}/Bin/Win32:${BASE_TOOLS}/BinWrappers/WindowsLike:$PATH"
+      # Extract header paths for cl.exe to work.
+      eval "$(python -c '
+  import sys, os, subprocess
+  import distutils.msvc9compiler as msvc
+  msvc.find_vcvarsall=lambda _: sys.argv[1]
+  envs=msvc.query_vcvarsall(sys.argv[2])
+  for k,v in envs.items():
+      k = k.upper()
+      v = ":".join(subprocess.check_output(["cygpath","-u",p]).decode("ascii").rstrip() for p in v.split(";"))
+      v = v.replace("'\''",r"'\'\\\'\''")
+      print("export %(k)s='\''%(v)s'\''" % locals())
+  ' "${VS2019_BUILDTOOLS}\\Common7\\Tools\\VsDevCmd.bat" '-arch=amd64')"
+      # Normal build similar to Unix.
+      cd BaseTools || exit 1
+      nmake        || exit 1
+      cd ..        || exit 1
     else
-      echo "找不到 rc.exe"
-      exit 1
+      echo "构建EDK环境...."
+      makeme -C BaseTools -j || exit 1
     fi
-    BASE_TOOLS="$(pwd)/BaseTools"
-    export PATH="${BASE_TOOLS}/Bin/Win32:${BASE_TOOLS}/BinWrappers/WindowsLike:$PATH"
-    # Extract header paths for cl.exe to work.
-    eval "$(python -c '
-import sys, os, subprocess
-import distutils.msvc9compiler as msvc
-msvc.find_vcvarsall=lambda _: sys.argv[1]
-envs=msvc.query_vcvarsall(sys.argv[2])
-for k,v in envs.items():
-    k = k.upper()
-    v = ":".join(subprocess.check_output(["cygpath","-u",p]).decode("ascii").rstrip() for p in v.split(";"))
-    v = v.replace("'\''",r"'\'\\\'\''")
-    print("export %(k)s='\''%(v)s'\''" % locals())
-' "${VS2019_BUILDTOOLS}\\Common7\\Tools\\VsDevCmd.bat" '-arch=amd64')"
-    # Normal build similar to Unix.
-    cd BaseTools || exit 1
-    nmake        || exit 1
-    cd ..        || exit 1
-  else
-  echo "构建EDK环境..."
-    makeme -C BaseTools -j || exit 1
+    touch UDK.ready
+      echo -e "----------------------------------------------------------------\n"
   fi
-  touch UDK.ready
-  echo -e "----------------------------------------------------------------\n"
 fi
 
 if [ "$SKIP_BUILD" != "1" ]; then
