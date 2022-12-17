@@ -408,7 +408,7 @@ fi
 
 if [ "$NEW_BUILDSYSTEM" != "1" ]; then
   if [ "$OFFLINE_MODE" != "1" ]; then
-    updaterepo "https://codechina.csdn.net/btwise/audk.git" UDK master || exit 1
+    updaterepo "https://gitcode.net/btwise/audk.git" UDK master || exit 1
   else
     echo "在离线模式下工作。跳过 UDK 更新"
   fi
