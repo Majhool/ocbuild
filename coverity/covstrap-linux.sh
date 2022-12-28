@@ -1,21 +1,21 @@
 #!/bin/bash
 
 #
-#  covstrap.sh
+#  covstrap-linux.sh
 #  ocbuild
 #
-#  Copyright © 2018 vit9696. All rights reserved.
+#  Copyright © 2018-2022 vit9696, PMheart. All rights reserved.
 #
 
 #
 #  This script is supposed to quickly bootstrap Coverity Scan environment for GitHub Actions
-#  to be later used with Acidanthera products.
+#  to be later used with OpenCore.
 #
 #  Latest version available at:
-#  https://raw.githubusercontent.com/acidanthera/ocbuild/master/coverity/covstrap.sh
+#  https://raw.githubusercontent.com/acidanthera/ocbuild/master/coverity/covstrap-linux.sh
 #
 #  Example usage:
-#  src=$(/usr/bin/curl -Lfs https://raw.githubusercontent.com/acidanthera/ocbuild/master/coverity/covstrap.sh) && eval "$src" || exit 1
+#  src=$(/usr/bin/curl -Lfs https://raw.githubusercontent.com/acidanthera/ocbuild/master/coverity/covstrap-linux.sh) && eval "$src" || exit 1
 #
 
 abort() {
@@ -64,61 +64,34 @@ for tool in "${TOOLS[@]}"; do
 done
 
 # Download Coverity
-COVERITY_SCAN_DIR="${PROJECT_PATH}/cov-scan"
-COVERITY_SCAN_ARCHIVE=cov-analysis.dmg
-COVERITY_SCAN_INSTALLER=cov-analysis.sh
-COVERITY_SCAN_LINK="https://scan.coverity.com/download/cxx/macOSX"
+COVERITY_ANALYSIS_DIR="${PROJECT_PATH}/cov-analysis"
+COVERITY_SCAN_ARCHIVE=cov-analysis.tar.gz
+COVERITY_SCAN_LINK="https://scan.coverity.com/download/cxx/linux64"
 
 ret=0
-echo "Downloading Coverity build tool..."
+echo "Downloading Coverity analysis tool..."
 "${CURL}" -LfsS "${COVERITY_SCAN_LINK}" -d "token=${COVERITY_SCAN_TOKEN}&project=${GITHUB_REPOSITORY}" -o "${COVERITY_SCAN_ARCHIVE}" || ret=$?
 if [ $ret -ne 0 ]; then
-  abort "Failed to download Coverity build tool with code ${ret}"
+  abort "Failed to download Coverity analysis tool with code ${ret}"
 fi
 
-hdiutil attach "${COVERITY_SCAN_ARCHIVE}" || ret=$?
+"${TAR}" -xzf cov-analysis.tar.gz
 if [ $ret -ne 0 ]; then
-  abort "Failed to mount Coverity build tool with code ${ret}"
+  abort "Failed to decompress Coverity analysis tool with code ${ret}"
 fi
 
-cp "$(ls /Volumes/cov-analysis-macosx-*/cov-analysis-macosx-*)" "${COVERITY_SCAN_INSTALLER}" || ret=$?
+"${MV}" cov-analysis-linux64-* "${COVERITY_ANALYSIS_DIR}"
 if [ $ret -ne 0 ]; then
-  abort "Failed to copy Coverity installer with code ${ret}"
-fi
-
-mkdir -p cov-analysis
-cd cov-analysis || ret=$?
-if [ $ret -ne 0 ]; then
-  abort "Failed to cd to cov-analysis ${ret}"
-fi
-
-../"${COVERITY_SCAN_INSTALLER}" || ret=$?
-if [ $ret -ne 0 ]; then
-  abort "Failed to extract Coverity build tool with code ${ret}"
-fi
-
-COVERITY_EXTRACT_DIR=$(pwd)
-if [ "${COVERITY_EXTRACT_DIR}" = "" ]; then
-  abort "Failed to find Coverity build tool directory"
-fi
-
-cd ..
-"${RM}" -rf "${COVERITY_SCAN_DIR}"
-"${MV}" "${COVERITY_EXTRACT_DIR}" "${COVERITY_SCAN_DIR}" || ret=$?
-if [ "${COVERITY_EXTRACT_DIR}" = "" ]; then
-  abort "Failed to move Coverity build tool from ${COVERITY_EXTRACT_DIR} to ${COVERITY_SCAN_DIR}"
+  abort "Failed to rename cov-analysis-linux64 directory to cov-analysis"
 fi
 
 # Export override variables
 export COVERITY_RESULTS_DIR="${PROJECT_PATH}/cov-int"
-export CC="/usr/bin/clang"
-export CXX="/usr/bin/clang++"
 
 # Refresh PATH to apply overrides
-export PATH="${COVERITY_SCAN_DIR}/bin:${PATH}"
+export PATH="${COVERITY_ANALYSIS_DIR}/bin:${PATH}"
 
 # Run Coverity
-export COVERITY_UNSUPPORTED=1
 # shellcheck disable=SC2086
 cov-build --dir "${COVERITY_RESULTS_DIR}" ${COVERITY_BUILD_COMMAND} || ret=$?
 if [ $ret -ne 0 ]; then

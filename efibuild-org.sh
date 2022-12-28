@@ -5,6 +5,14 @@ unset PACKAGES_PATH
 
 BUILDDIR=$(pwd)
 
+if [ "$NEW_BUILDSYSTEM" = "" ]; then
+  NEW_BUILDSYSTEM=0
+fi
+
+if [ "$OFFLINE_MODE" = "" ]; then
+  OFFLINE_MODE=0
+fi
+
 prompt() {
   echo "$1"
   if [ "$FORCE_INSTALL" != "1" ]; then
@@ -22,7 +30,7 @@ updaterepo() {
   pushd "$2" >/dev/null || exit 1
   git pull --rebase --autostash
   if [ "$2" != "UDK" ] && [ "$(unamer)" != "Windows" ]; then
-    sym=$(find . -not -type d -exec file "{}" ";" | grep CRLF)
+    sym=$(find . -not -type d -not -path "./coreboot/*" -not -path "./UDK/*" -exec file "{}" ";" | grep CRLF)
     if [ "${sym}" != "" ]; then
       echo "Repository $1 named $2 contains CRLF line endings"
       echo "$sym"
@@ -78,10 +86,10 @@ buildme() {
 }
 
 symlink() {
+  rm -rf "$2"
   if [ "$(unamer)" = "Windows" ]; then
     # This requires extra permissions.
     # cmd <<< "mklink /D \"$2\" \"${1//\//\\}\"" > /dev/null
-    rm -rf "$2"
     mkdir -p "$2" || exit 1
     for i in "$1"/* ; do
       if [ "$(echo "${i}" | grep "$(basename "$(pwd)")")" != "" ]; then
@@ -89,7 +97,7 @@ symlink() {
       fi
       cp -r "$i" "$2" || exit 1
     done
-  elif [ ! -d "$2" ]; then
+  else
     ln -s "$1" "$2" || exit 1
   fi
 }
@@ -159,10 +167,10 @@ if [ "$(nasm -v)" = "" ] || [ "$(nasm -v | grep Apple)" != "" ]; then
   fi
   pushd /tmp >/dev/null || exit 1
   rm -rf nasm-mac64.zip
-  curl -OL "https://gitee.com/btwise/ocbuild/raw/master/external/nasm-mac64.zip" || exit 1
+  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/nasm-mac64.zip" || exit 1
   nasmzip=$(cat nasm-mac64.zip)
   rm -rf nasm-*
-  curl -OL "https://gitee.com/btwise/ocbuild/raw/master/external/${nasmzip}" || exit 1
+  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/${nasmzip}" || exit 1
   unzip -q "${nasmzip}" nasm*/nasm nasm*/ndisasm || exit 1
   sudo mkdir -p /usr/local/bin || exit 1
   sudo mv nasm*/nasm /usr/local/bin/ || exit 1
@@ -182,10 +190,10 @@ if [ "$(iasl -v)" = "" ]; then
   fi
   pushd /tmp >/dev/null || exit 1
   rm -rf iasl-macosx.zip
-  curl -OL "https://gitee.com/btwise/ocbuild/raw/master/external/iasl-macosx.zip" || exit 1
+  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/iasl-macosx.zip" || exit 1
   iaslzip=$(cat iasl-macosx.zip)
   rm -rf iasl
-  curl -OL "https://gitee.com/btwise/ocbuild/raw/master/external/${iaslzip}" || exit 1
+  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/${iaslzip}" || exit 1
   unzip -q "${iaslzip}" iasl || exit 1
   sudo mkdir -p /usr/local/bin || exit 1
   sudo mv iasl /usr/local/bin/ || exit 1
@@ -194,7 +202,7 @@ if [ "$(iasl -v)" = "" ]; then
 fi
 
 if [ "${MTOC_HASH}" = "" ]; then
-  MTOC_HASH=$(curl -L "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
+  MTOC_HASH=$(curl -L "https://github.com/acidanthera/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
 fi
 
 if [ "${MTOC_HASH}" = "" ]; then
@@ -235,10 +243,10 @@ if ! $valid_mtoc; then
   prompt "Install prebuilt mtoc automatically?"
   pushd /tmp >/dev/null || exit 1
   rm -f mtoc mtoc-mac64.zip
-  curl -OL "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.zip" || exit 1
+  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/mtoc-mac64.zip" || exit 1
   mtoczip=$(cat mtoc-mac64.zip)
   rm -rf mtoc-*
-  curl -OL "https://gitee.com/btwise/ocbuild/raw/master/external/${mtoczip}" || exit 1
+  curl -OL "https://github.com/acidanthera/ocbuild/raw/master/external/${mtoczip}" || exit 1
   unzip -q "${mtoczip}" mtoc || exit 1
   sudo mkdir -p /usr/local/bin || exit 1
   sudo rm -f /usr/local/bin/mtoc /usr/local/bin/mtoc.NEW || exit 1
@@ -267,7 +275,7 @@ if [ "$TOOLCHAINS" = "" ]; then
   if [ "$(unamer)" = "Darwin" ]; then
     TOOLCHAINS=('XCODE5')
   elif [ "$(unamer)" = "Windows" ]; then
-    TOOLCHAINS=('VS2017')
+    TOOLCHAINS=('VS2019')
   else
     TOOLCHAINS=('CLANGPDB' 'GCC5')
   fi
@@ -287,6 +295,7 @@ SKIP_TESTS=0
 SKIP_BUILD=0
 SKIP_PACKAGE=0
 MODE=""
+BUILD_ARGUMENTS=()
 
 while true; do
   if [ "$1" == "--skip-tests" ]; then
@@ -297,6 +306,12 @@ while true; do
     shift
   elif [ "$1" == "--skip-package" ]; then
     SKIP_PACKAGE=1
+    shift
+  elif [ "$1" == "--build-extra" ]; then
+    shift
+    BUILD_STRING="$1"
+    # shellcheck disable=SC2206
+    BUILD_ARGUMENTS+=($BUILD_STRING )
     shift
   else
     break
@@ -314,102 +329,119 @@ if [ ! -d "Binaries" ]; then
   mkdir Binaries || exit 1
 fi
 
-if [ ! -f UDK/UDK.ready ]; then
-  rm -rf UDK
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ ! -f UDK/UDK.ready ]; then
+    rm -rf UDK
 
-  if [ "$(unamer)" != "Windows" ]; then
-    sym=$(find . -not -type d -exec file "{}" ";" | grep CRLF)
-    if [ "${sym}" != "" ]; then
-      echo "Error: the following files in the repository CRLF line endings:"
-      echo "$sym"
-      exit 1
+    if [ "$(unamer)" != "Windows" ]; then
+      sym=$(find . -not -type d -not -path "./coreboot/*" -exec file "{}" ";" | grep CRLF)
+      if [ "${sym}" != "" ]; then
+        echo "Error: the following files in the repository CRLF line endings:"
+        echo "$sym"
+        exit 1
+      fi
     fi
   fi
 fi
 
-updaterepo "https://codechina.csdn.net/btwise/audk.git" UDK master || exit 1
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ "$OFFLINE_MODE" != "1" ]; then
+    updaterepo "https://github.com/acidanthera/audk" UDK master || exit 1
+  else
+    echo "Working in offline mode. Skip UDK update"
+  fi
+fi
 cd UDK || exit 1
 HASH=$(git rev-parse origin/master)
 
-if [ -d ../Patches ]; then
-  if [ ! -f patches.ready ]; then
-    git config user.name btwise
-    git config user.email tyq@qq.com
-    git config commit.gpgsign false
-    for i in ../Patches/* ; do
-      git apply --ignore-whitespace "$i" || exit 1
-      git add .
-      git commit -m "Applied patch $i" || exit 1
-    done
-    touch patches.ready
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ -d ../Patches ]; then
+    if [ ! -f patches.ready ]; then
+      git config user.name ocbuild
+      git config user.email ocbuild@acidanthera.local
+      git config commit.gpgsign false
+      for i in ../Patches/* ; do
+        git apply --ignore-whitespace "$i" || exit 1
+        git add .
+        git commit -m "Applied patch $i" || exit 1
+      done
+      touch patches.ready
+    fi
   fi
 fi
 
 deps="${#DEPNAMES[@]}"
 for (( i=0; i<deps; i++ )) ; do
-  updaterepo "${DEPURLS[$i]}" "${DEPNAMES[$i]}" "${DEPBRANCHES[$i]}" || exit 1
+  echo "Updating ${DEPNAMES[$i]}"
+  if [ "$OFFLINE_MODE" != "1" ]; then
+    updaterepo "${DEPURLS[$i]}" "${DEPNAMES[$i]}" "${DEPBRANCHES[$i]}" || exit 1
+  else
+    echo "Working in offline mode. Skip ${DEPNAMES[$i]} update"
+  fi
+
 done
 
-# Allow building non-self packages.
-if [ ! -e "${SELFPKG_DIR}" ]; then
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  # Allow building non-self packages.
   symlink .. "${SELFPKG_DIR}" || exit 1
 fi
 
-source edksetup.sh || exit 1
+. ./edksetup.sh || exit 1
 
-if [ "$SKIP_TESTS" != "1" ]; then
-  echo "Testing..."
-  if [ "$(unamer)" = "Windows" ]; then
-    # Configure Visual Studio environment. Requires:
-    # 1. choco install microsoft-build-tools visualcpp-build-tools nasm zip
-    # 2. iasl in PATH for MdeModulePkg
-    tools="${EDK_TOOLS_PATH}"
-    tools="${tools//\//\\}"
-    # For Travis CI
-    tools="${tools/\\c\\/C:\\}"
-    # For GitHub Actions
-    tools="${tools/\\d\\/D:\\}"
-    echo "Expanded EDK_TOOLS_PATH from ${EDK_TOOLS_PATH} to ${tools}"
-    export EDK_TOOLS_PATH="${tools}"
-    export BASE_TOOLS_PATH="${tools}"
-    VS2017_BUILDTOOLS="C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\BuildTools"
-    VS2017_BASEPREFIX="${VS2017_BUILDTOOLS}\\VC\\Tools\\MSVC\\"
-    # Intended to use ls here to get first entry.
-    # REF: https://github.com/koalaman/shellcheck/wiki/SC2012
-    # shellcheck disable=SC2012
-    cd "${VS2017_BASEPREFIX}" || exit 1
-    # Incorrect diagnostic due to action.
-    # REF: https://github.com/koalaman/shellcheck/wiki/SC2035
-    # shellcheck disable=SC2035
-    VS2017_DIR="$(find * -maxdepth 0 -type d -print -quit)"
-    if [ "${VS2017_DIR}" = "" ]; then
-      echo "No VS2017 MSVC compiler"
-      exit 1
-    fi
-    cd - || exit 1
-    export VS2017_PREFIX="${VS2017_BASEPREFIX}${VS2017_DIR}\\"
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ "$SKIP_TESTS" != "1" ]; then
+    echo "Testing..."
+    if [ "$(unamer)" = "Windows" ]; then
+      # Configure Visual Studio environment. Requires:
+      # 1. choco install vswhere microsoft-build-tools visualcpp-build-tools nasm zip
+      # 2. iasl in PATH for MdeModulePkg
+      tools="${EDK_TOOLS_PATH}"
+      tools="${tools//\//\\}"
+      # For Travis CI
+      tools="${tools/\\c\\/C:\\}"
+      # For GitHub Actions
+      tools="${tools/\\d\\/D:\\}"
+      echo "Expanded EDK_TOOLS_PATH from ${EDK_TOOLS_PATH} to ${tools}"
+      export EDK_TOOLS_PATH="${tools}"
+      export BASE_TOOLS_PATH="${tools}"
+      VS2019_BUILDTOOLS=$(vswhere -latest -version '[16.0,17.1)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+      VS2019_BASEPREFIX="${VS2019_BUILDTOOLS}\\VC\\Tools\\MSVC\\"
+      # Intended to use ls here to get first entry.
+      # REF: https://github.com/koalaman/shellcheck/wiki/SC2012
+      # shellcheck disable=SC2012
+      cd "${VS2019_BASEPREFIX}" || exit 1
+      # Incorrect diagnostic due to action.
+      # REF: https://github.com/koalaman/shellcheck/wiki/SC2035
+      # shellcheck disable=SC2035
+      VS2019_DIR="$(find * -maxdepth 0 -type d -print -quit)"
+      if [ "${VS2019_DIR}" = "" ]; then
+        echo "No VS2019 MSVC compiler"
+        exit 1
+      fi
+      cd - || exit 1
+      export VS2019_PREFIX="${VS2019_BASEPREFIX}${VS2019_DIR}\\"
 
-    WINSDK_BASE="/c/Program Files (x86)/Windows Kits/10/bin"
-    if [ -d "${WINSDK_BASE}" ]; then
-      for dir in "${WINSDK_BASE}"/*/; do
-        if [ -f "${dir}x86/rc.exe" ]; then
-          WINSDK_PATH_FOR_RC_EXE="${dir}x86/rc.exe"
-          WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE//\//\\}"
-          WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE/\\c\\/C:\\}"
-          break
-        fi
-      done
-    fi
-    if [ "${WINSDK_PATH_FOR_RC_EXE}" != "" ]; then
-      export WINSDK_PATH_FOR_RC_EXE
-    else
-      echo "Failed to find rc.exe"
-      exit 1
-    fi
-    BASE_TOOLS="$(pwd)/BaseTools"
-    export PATH="${BASE_TOOLS}/Bin/Win32:${BASE_TOOLS}/BinWrappers/WindowsLike:$PATH"
-    # Extract header paths for cl.exe to work.
-    eval "$(python -c '
+      WINSDK_BASE="/c/Program Files (x86)/Windows Kits/10/bin"
+      if [ -d "${WINSDK_BASE}" ]; then
+        for dir in "${WINSDK_BASE}"/*/; do
+          if [ -f "${dir}x86/rc.exe" ]; then
+            WINSDK_PATH_FOR_RC_EXE="${dir}x86/rc.exe"
+            WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE//\//\\}"
+            WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE/\\c\\/C:\\}"
+            break
+          fi
+        done
+      fi
+      if [ "${WINSDK_PATH_FOR_RC_EXE}" != "" ]; then
+        export WINSDK_PATH_FOR_RC_EXE
+      else
+        echo "Failed to find rc.exe"
+        exit 1
+      fi
+      BASE_TOOLS="$(pwd)/BaseTools"
+      export PATH="${BASE_TOOLS}/Bin/Win32:${BASE_TOOLS}/BinWrappers/WindowsLike:$PATH"
+      # Extract header paths for cl.exe to work.
+      eval "$(python -c '
 import sys, os, subprocess
 import distutils.msvc9compiler as msvc
 msvc.find_vcvarsall=lambda _: sys.argv[1]
@@ -419,25 +451,31 @@ for k,v in envs.items():
     v = ":".join(subprocess.check_output(["cygpath","-u",p]).decode("ascii").rstrip() for p in v.split(";"))
     v = v.replace("'\''",r"'\'\\\'\''")
     print("export %(k)s='\''%(v)s'\''" % locals())
-' "${VS2017_BUILDTOOLS}\\Common7\\Tools\\VsDevCmd.bat" '-arch=amd64')"
-    # Normal build similar to Unix.
-    cd BaseTools || exit 1
-    nmake        || exit 1
-    cd ..        || exit 1
-  else
-    make -C BaseTools -j || exit 1
+' "${VS2019_BUILDTOOLS}\\Common7\\Tools\\VsDevCmd.bat" '-arch=amd64')"
+      # Normal build similar to Unix.
+      cd BaseTools || exit 1
+      nmake        || exit 1
+      cd ..        || exit 1
+    else
+      make -C BaseTools -j || exit 1
+    fi
+    touch UDK.ready
   fi
-  touch UDK.ready
 fi
 
 if [ "$SKIP_BUILD" != "1" ]; then
   echo "Building..."
-  for arch in "${ARCHS[@]}" ; do
+  for i in "${!ARCHS[@]}" ; do
     for toolchain in "${TOOLCHAINS[@]}" ; do
       for target in "${TARGETS[@]}" ; do
         if [ "$MODE" = "" ] || [ "$MODE" = "$target" ]; then
-          echo "Building ${SELFPKG_DIR}/${SELFPKG}.dsc for $arch in $target with ${toolchain}..."
-          buildme -a "$arch" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" || abortbuild
+          if [ "${ARCHS_EXT[i]}" == "" ]; then
+            echo "Building ${SELFPKG_DIR}/${SELFPKG}.dsc for ${ARCHS[i]} in $target with ${toolchain} and flags ${BUILD_ARGUMENTS[*]} ..."
+            buildme -a "${ARCHS[i]}" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" "${BUILD_ARGUMENTS[@]}" || abortbuild
+          else
+            echo "Building ${SELFPKG_DIR}/${SELFPKG}.dsc for ${ARCHS[i]} with extra arch ${ARCHS_EXT[i]} in $target with ${toolchain} and flags ${BUILD_ARGUMENTS[*]} ..."
+            buildme -a "${ARCHS_EXT[i]}" -a "${ARCHS[i]}" -b "$target" -t "${toolchain}" -p "${SELFPKG_DIR}/${SELFPKG}.dsc" "${BUILD_ARGUMENTS[@]}" || abortbuild
+          fi
           echo " - OK"
         fi
       done
@@ -454,12 +492,19 @@ if [ "$(type -t package)" = "function" ]; then
       rm -f Binaries/*.zip
     fi
     for rtarget in "${RTARGETS[@]}" ; do
-      if [ "$PACKAGE" = "" ] || [ "$PACKAGE" = "$rtarget" ]; then
-        package "UDK/Build/${RELPKG}/${rtarget}_${TOOLCHAINS[0]}/${ARCHS[0]}" "$rtarget" "$HASH" || exit 1
-        if [ "$NO_ARCHIVES" != "1" ]; then
-          cp "UDK/Build/${RELPKG}/${rtarget}_${TOOLCHAINS[0]}/${ARCHS[0]}"/*.zip Binaries || echo skipping
+      for toolchain in "${TOOLCHAINS[@]}" ; do
+        if [ "$PACKAGE" = "" ] || [ "$PACKAGE" = "$rtarget" ]; then
+          if [ "${#TOOLCHAINS[@]}" -eq 1 ]; then
+            name="${rtarget}"
+          else
+            name="${toolchain}-${rtarget}"
+          fi
+          package "UDK/Build/${RELPKG}/${rtarget}_${toolchain}/${ARCHS[0]}" "${name}" "${HASH}" || exit 1
+          if [ "$NO_ARCHIVES" != "1" ]; then
+            cp "UDK/Build/${RELPKG}/${rtarget}_${toolchain}/${ARCHS[0]}"/*.zip Binaries || echo skipping
+          fi
         fi
-      fi
+      done
     done
   fi
 fi

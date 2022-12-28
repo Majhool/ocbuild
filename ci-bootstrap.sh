@@ -1,12 +1,17 @@
 #!/bin/bash
 
+abort() {
+  echo "ERROR: $1!"
+  exit 1
+}
+
 unamer() {
   NAME="$(uname)"
 
   if [ "$(echo "${NAME}" | grep MINGW)" != "" ] || [ "$(echo "${NAME}" | grep MSYS)" != "" ]; then
-  echo "Windows"
+    echo "Windows"
   else
-  echo "${NAME}"
+    echo "${NAME}"
   fi
 }
 
@@ -17,22 +22,28 @@ if [ "$(unamer)" = "Darwin" ]; then
   # env:
   #  PROJECT_TYPE: "UEFI"
 
+  # TODO: Get rid of 13.2.1 after fully migrating to macOS 12 workers.
+  if [ "$(uname -r | cut -f1 -d'.')" = "20" ]; then
+    XCODE_VERSION="13.2.1"
+  else
+    XCODE_VERSION="13.4.1"
+  fi
+
   case "${PROJECT_TYPE}" in 
     UEFI)
-      BUILD_DEVELOPER_DIR="${XCODE_DIR/VERSION/12.5.1}"
-      ANALYZE_DEVELOPER_DIR="${XCODE_DIR/VERSION/12.5.1}"
-      COVERITY_DEVELOPER_DIR="${XCODE_DIR/VERSION/12.5.1}"
+      BUILD_DEVELOPER_DIR="${XCODE_DIR/VERSION/${XCODE_VERSION}}"
+      ANALYZE_DEVELOPER_DIR="${XCODE_DIR/VERSION/${XCODE_VERSION}}"
+      COVERITY_DEVELOPER_DIR="${XCODE_DIR/VERSION/${XCODE_VERSION}}"
       ;;
     
     KEXT | TOOL)
-      BUILD_DEVELOPER_DIR="${XCODE_DIR/VERSION/12.5.1}"
-      ANALYZE_DEVELOPER_DIR="${XCODE_DIR/VERSION/12.5.1}"
-      COVERITY_DEVELOPER_DIR="${XCODE_DIR/VERSION/12.5.1}"
+      BUILD_DEVELOPER_DIR="${XCODE_DIR/VERSION/${XCODE_VERSION}}"
+      ANALYZE_DEVELOPER_DIR="${XCODE_DIR/VERSION/${XCODE_VERSION}}"
+      COVERITY_DEVELOPER_DIR="${XCODE_DIR/VERSION/${XCODE_VERSION}}"
       ;;
     
     *)
-      echo "ERROR: Invalid project type!"
-      exit 1
+      abort "Invalid project type"
       ;;
   esac
 
@@ -44,8 +55,7 @@ if [ "$(unamer)" = "Darwin" ]; then
   export SELECTED_DEVELOPER_DIR
 
   if [ -z "${!SELECTED_DEVELOPER_DIR}" ]; then
-    echo "ERROR: Invalid or missing job type!"
-    exit 1
+    abort "Invalid or missing job type"
   fi
 
   echo "DEVELOPER_DIR=${!SELECTED_DEVELOPER_DIR}" >> "$GITHUB_ENV"
