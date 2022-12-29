@@ -452,7 +452,7 @@ echo "正在设置EDK工作空间..."
 
 if [ "$NEW_BUILDSYSTEM" != "1" ]; then
   if [ "$SKIP_TESTS" != "1" ]; then
-    echo "Testing..."
+    echo "......"
     if [ "$(unamer)" = "Windows" ]; then
       # 配置 Visual Studio 环境. 需要:
       # 1. choco install vswhere microsoft-build-tools visualcpp-build-tools nasm zip
