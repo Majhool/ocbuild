@@ -141,10 +141,10 @@ makeme() {
 }
 
 symlink() {
-  rm -rf "$2"
   if [ "$(unamer)" = "Windows" ]; then
     # This requires extra permissions.
     # cmd <<< "mklink /D \"$2\" \"${1//\//\\}\"" > /dev/null
+    rm -rf "$2"
     mkdir -p "$2" || exit 1
     for i in "$1"/* ; do
       if [ "$(echo "${i}" | grep "$(basename "$(pwd)")")" != "" ]; then
@@ -152,7 +152,7 @@ symlink() {
       fi
       cp -r "$i" "$2" || exit 1
     done
-  else
+  elif [ ! -d "$2" ]; then
     ln -s "$1" "$2" || exit 1
   fi
 }
@@ -416,6 +416,14 @@ fi
 cd UDK || exit 1
 HASH=$(git rev-parse origin/master)
 
+if [ "$DISCARD_PACKAGES" != "" ]; then 
+  for package_to_discard in "${DISCARD_PACKAGES[@]}" ; do
+    if [ -d "${package_to_discard}" ]; then
+      rm -rf "${package_to_discard}"
+    fi
+  done
+fi
+
 if [ "$NEW_BUILDSYSTEM" != "1" ]; then
   if [ -d ../Patches ]; then
     if [ ! -f patches.ready ]; then
@@ -444,8 +452,10 @@ for (( i=0; i<deps; i++ )) ; do
 done
 
 if [ "$NEW_BUILDSYSTEM" != "1" ]; then
-  # 允许构建非自我包.
-  symlink .. "${SELFPKG_DIR}" || exit 1
+  # Allow building non-self packages.
+  if [ ! -e "${SELFPKG_DIR}" ]; then
+    symlink .. "${SELFPKG_DIR}" || exit 1
+  fi
 fi
 echo "正在设置EDK工作空间..."
 . ./edksetup.sh >/dev/null || exit 1
