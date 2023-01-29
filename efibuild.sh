@@ -13,6 +13,16 @@ if [ "$OFFLINE_MODE" = "" ]; then
   OFFLINE_MODE=0
 fi
 
+is_array()
+{
+    # 检测参数是否为数组，成功时返回1，否则返回0
+    [ -z "$1" ] && return 0
+    if [ -n "$BASH" ]; then
+      declare -p "${1}" 2> /dev/null | grep 'declare \-a' >/dev/null && return 1
+    fi
+    return 0
+}
+
 prompt() {
   echo "$1"
   if [ "$FORCE_INSTALL" != "1" ]; then
@@ -212,7 +222,7 @@ fi
 
 if [ "$(nasm -v)" = "" ] || [ "$(nasm -v | grep Apple)" != "" ]; then
   echo "缺少或不兼容的nasm，请手工安装它!"
-  echo "从 from http://www.nasm.us/pub/nasm/releasebuilds 下载最新的nasm"
+  echo "从仓库下载最新的nasm"
   echo "当前路径: $PATH -- $(which nasm)"
   # On Darwin we can install prebuilt nasm. On Linux let users handle it.
   if [ "$(unamer)" = "Darwin" ]; then
@@ -327,11 +337,31 @@ if [ "$RELPKG" = "" ]; then
   RELPKG="$SELFPKG"
 fi
 
-if [ "$ARCHS" = "" ]; then
+if [[ ! $(is_array ARCHS) ]]; then
+  IFS=', ' read -r -a ARCHS <<< "$ARCHS"
+fi
+
+if [[ ! $(is_array ARCHS_EXT) ]]; then
+  IFS=', ' read -r -a ARCHS_EXT <<< "$ARCHS_EXT"
+fi
+
+if [[ ! $(is_array TOOLCHAINS) ]]; then
+  IFS=', ' read -r -a TOOLCHAINS <<< "$TOOLCHAINS"
+fi
+
+if [[ ! $(is_array TARGETS) ]]; then
+  IFS=', ' read -r -a TARGETS <<< "$TARGETS"
+fi
+
+if [[ ! $(is_array RTARGETS) ]]; then
+  IFS=', ' read -r -a RTARGETS <<< "$RTARGETS"
+fi
+
+if [ "${ARCHS[*]}" = "" ]; then
   ARCHS=('X64')
 fi
 
-if [ "$TOOLCHAINS" = "" ]; then
+if [ "${TOOLCHAINS[*]}" = "" ]; then
   if [ "$(unamer)" = "Darwin" ]; then
     TOOLCHAINS=('XCODE5')
   elif [ "$(unamer)" = "Windows" ]; then
@@ -341,10 +371,8 @@ if [ "$TOOLCHAINS" = "" ]; then
   fi
 fi
 
-if [ "$TARGETS" = "" ]; then
-#   TARGETS=('DEBUG' 'RELEASE' 'NOOPT')
-   TARGETS=('DEBUG' 'RELEASE')
-
+if [ "${TARGETS[*]}" = "" ]; then
+  TARGETS=('DEBUG' 'RELEASE')
 elif [ "${RTARGETS[*]}" = "" ]; then
   RTARGETS=("${TARGETS[@]}")
 fi
