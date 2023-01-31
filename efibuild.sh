@@ -268,16 +268,6 @@ if [ "$(iasl -v)" = "" ]; then
   popd >/dev/null || exit 1
 fi
 
-echo "校验mtoc的hash值...."
-if [ "${MTOC_HASH}" = "" ]; then
-  MTOC_HASH=$(curl -Ls "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.sha256") || exit 1
-fi
-
-if [ "${MTOC_HASH}" = "" ]; then
-  echo "无法获得最新的兼容mtoc hash!"
-  exit 1
-fi
-
 # On Darwin we need mtoc. Only for XCODE5, but do not care for now.
 if [ "$(unamer)" = "Darwin" ]; then
   valid_mtoc=false
@@ -285,18 +275,15 @@ else
   valid_mtoc=true
 fi
 
+MTOC_LATEST_VERSION="1.0.0"
+
 if [ "$(which mtoc)" != "" ]; then
-  mtoc_path=$(which mtoc)
-  mtoc_hash_user=$(shasum -a 256 "${mtoc_path}" | cut -d' ' -f1)
-  if [ "${MTOC_HASH}" = "${mtoc_hash_user}" ]; then
+  mtoc_version=$(mtoc --version)
+  if [ "${mtoc_version}" = "${MTOC_LATEST_VERSION}" ]; then
     valid_mtoc=true
   elif [ "${IGNORE_MTOC_VERSION}" = "1" ]; then
     echo "强制使用未知的mtoc版本,由于 IGNORE_MTOC_VERSION=1"
     valid_mtoc=true
-  elif [ "${mtoc_path}" != "/usr/local/bin/mtoc" ]; then
-    echo "自定义未知mtoc安装到 ${mtoc_path}!"
-    echo "提示:删除此mtoc或使用 IGNORE_MTOC_VERSION=1，风险自负."
-    exit 1
   else
     echo "发现安装到不兼容的mtoc ${mtoc_path}!"
     echo "预期的SHA-256: ${MTOC_HASH}"
@@ -310,25 +297,20 @@ if ! $valid_mtoc; then
   echo "要构建mtoc，请遵循以下步骤: https://github.com/tianocore/tianocore.github.io/wiki/Xcode#mac-os-x-xcode"
   prompt "自动安装预构建的mtoc？"
   pushd /tmp >/dev/null || exit 1
-  rm -f mtoc mtoc-mac64.zip
+  rm -f mtoc ocmtoc-${MTOC_LATEST_VERSION}-RELEASE.zip
   echo "开始下载mtoc......"
-  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/mtoc-mac64.zip" || exit 1
-  mtoczip=$(cat mtoc-mac64.zip)
-  rm -rf mtoc-*
-  echo "开始下载nasm...."
-  curl -OLs "https://gitee.com/btwise/ocbuild/raw/master/external/${mtoczip}" || exit 1
-  unzip -q "${mtoczip}" mtoc || exit 1
+  curl -OL "https://gitcode.net/btwise/ocmtoc/-/raw/master/Release/ocmtoc-${MTOC_LATEST_VERSION}-RELEASE.zip" || exit 1
+  unzip -q "ocmtoc-${MTOC_LATEST_VERSION}-RELEASE.zip" mtoc || exit 1
   sudo mkdir -p /usr/local/bin || exit 1
   sudo rm -f /usr/local/bin/mtoc /usr/local/bin/mtoc.NEW || exit 1
   sudo cp mtoc /usr/local/bin/mtoc || exit 1
   popd >/dev/null || exit 1
 
-  mtoc_path=$(which mtoc)
-  mtoc_hash_user=$(shasum -a 256 "${mtoc_path}" | cut -d' ' -f1)
-  if [ "${MTOC_HASH}" != "${mtoc_hash_user}" ]; then
-    echo "未能安装兼容的mtoc版本!"
-    echo "预期的 SHA-256: ${MTOC_HASH}"
-    echo "发现的 SHA-256:    ${mtoc_hash_user}"
+  mtoc_version=$(mtoc --version)
+  if [ "${mtoc_version}" != "${MTOC_LATEST_VERSION}" ]; then
+    echo "无法安装兼容版本的MTOC!"
+    echo "预期版本: ${MTOC_LATEST_VERSION}"
+    echo "找到的版本:    ${mtoc_version}"
     exit 1
   fi
 fi
