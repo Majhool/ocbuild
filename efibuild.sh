@@ -301,6 +301,7 @@ if ! $valid_mtoc; then
   echo "开始下载mtoc......"
   curl -OL "https://gitcode.net/btwise/ocmtoc/-/raw/master/Release/ocmtoc-${MTOC_LATEST_VERSION}-RELEASE.zip" || exit 1
   unzip -q "ocmtoc-${MTOC_LATEST_VERSION}-RELEASE.zip" mtoc || exit 1
+  echo "请输入管理员密码:"
   sudo mkdir -p /usr/local/bin || exit 1
   sudo rm -f /usr/local/bin/mtoc /usr/local/bin/mtoc.NEW || exit 1
   sudo cp mtoc /usr/local/bin/mtoc || exit 1
