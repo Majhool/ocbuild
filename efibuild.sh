@@ -16,11 +16,11 @@ fi
 is_array()
 {
     # 检测参数是否为数组，成功时返回1，否则返回0
-    [ -z "$1" ] && return 0
+    [ -z "$1" ] && echo 0
     if [ -n "$BASH" ]; then
-      declare -p "${1}" 2> /dev/null | grep 'declare \-a' >/dev/null && return 1
+      declare -p "${1}" 2> /dev/null | grep 'declare \-a' >/dev/null && echo 1
     fi
-    return 0
+    echo 0
 }
 
 prompt() {
@@ -275,7 +275,7 @@ else
   valid_mtoc=true
 fi
 
-MTOC_LATEST_VERSION="1.0.0"
+MTOC_LATEST_VERSION="1.0.1"
 
 if [ "$(which mtoc)" != "" ]; then
   mtoc_version=$(mtoc --version)
@@ -319,23 +319,23 @@ if [ "$RELPKG" = "" ]; then
   RELPKG="$SELFPKG"
 fi
 
-if [[ ! $(is_array ARCHS) ]]; then
+if [ -n "$ARCHS" ] && [ "$(is_array ARCHS)" = "0" ]; then
   IFS=', ' read -r -a ARCHS <<< "$ARCHS"
 fi
 
-if [[ ! $(is_array ARCHS_EXT) ]]; then
+if [ -n "$ARCHS_EXT" ] && [ "$(is_array ARCHS_EXT)" = "0" ]; then
   IFS=', ' read -r -a ARCHS_EXT <<< "$ARCHS_EXT"
 fi
 
-if [[ ! $(is_array TOOLCHAINS) ]]; then
+if [ -n "$TOOLCHAINS" ] && [ "$(is_array TOOLCHAINS)" = "0" ]; then
   IFS=', ' read -r -a TOOLCHAINS <<< "$TOOLCHAINS"
 fi
 
-if [[ ! $(is_array TARGETS) ]]; then
+if [ -n "$TARGETS" ] && [ "$(is_array TARGETS)" = "0" ]; then
   IFS=', ' read -r -a TARGETS <<< "$TARGETS"
 fi
 
-if [[ ! $(is_array RTARGETS) ]]; then
+if [ -n "$RTARGETS" ] && [ "$(is_array RTARGETS)" = "0" ]; then
   IFS=', ' read -r -a RTARGETS <<< "$RTARGETS"
 fi
 
