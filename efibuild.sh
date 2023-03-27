@@ -275,7 +275,7 @@ else
   valid_mtoc=true
 fi
 
-MTOC_LATEST_VERSION="1.0.2"
+MTOC_LATEST_VERSION="1.0.3"
 
 if [ "$(which mtoc)" != "" ]; then
   mtoc_version=$(mtoc --version)
@@ -340,6 +340,10 @@ if [ -n "$RTARGETS" ] && [ "$(is_array RTARGETS)" = "0" ]; then
   IFS=', ' read -r -a RTARGETS <<< "$RTARGETS"
 fi
 
+if [ -n "$BUILD_ARGUMENTS" ] && [ "$(is_array BUILD_ARGUMENTS)" = "0" ]; then
+  IFS=', ' read -r -a BUILD_ARGUMENTS <<< "$BUILD_ARGUMENTS"
+fi
+
 if [ "${ARCHS[*]}" = "" ]; then
   ARCHS=('X64')
 fi
@@ -364,11 +368,21 @@ if [ "${RTARGETS[*]}" = "" ]; then
   RTARGETS=('DEBUG' 'RELEASE')
 fi
 
-SKIP_TESTS=0
-SKIP_BUILD=0
-SKIP_PACKAGE=0
+if [ "${BUILD_ARGUMENTS[*]}" = "" ]; then
+  BUILD_ARGUMENTS=()
+fi
+
+if [ -z "${SKIP_TESTS}" ]; then
+  SKIP_TESTS=0
+fi
+if [ -z "${SKIP_BUILD}" ]; then
+  SKIP_BUILD=0
+fi
+if [ -z "${SKIP_PACKAGE}" ]; then
+  SKIP_PACKAGE=0
+fi
+
 MODE=""
-BUILD_ARGUMENTS=()
 
 while true; do
   if [ "$1" == "--skip-tests" ]; then
@@ -471,60 +485,58 @@ fi
 echo "正在设置EDK工作空间..."
 . ./edksetup.sh >/dev/null || exit 1
 
-if [ "$NEW_BUILDSYSTEM" != "1" ]; then
-  if [ "$SKIP_TESTS" != "1" ]; then
-    echo "......"
-    if [ "$(unamer)" = "Windows" ]; then
-      # 配置 Visual Studio 环境. 需要:
-      # 1. choco install vswhere microsoft-build-tools visualcpp-build-tools nasm zip
-      # 2. 用于 MdeModulePkg 的在环境变量中的 iasl
-      tools="${EDK_TOOLS_PATH}"
-      tools="${tools//\//\\}"
-      # For Travis CI
-      tools="${tools/\\c\\/C:\\}"
-      # For GitHub Actions
-      tools="${tools/\\d\\/D:\\}"
-      echo "将 EDK_TOOLS_PATH 从 ${EDK_TOOLS_PATH} 扩展到 ${tools}"
-      export EDK_TOOLS_PATH="${tools}"
-      export BASE_TOOLS_PATH="${tools}"
-      VS2019_BUILDTOOLS=$(vswhere -latest -version '[16.0,17.1)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
-      VS2019_BASEPREFIX="${VS2019_BUILDTOOLS}\\VC\\Tools\\MSVC\\"
-      # 打算在这里使用 ls 来获得第一个条目.
-      # REF: https://github.com/koalaman/shellcheck/wiki/SC2012
-      # shellcheck disable=SC2012
-      cd "${VS2019_BASEPREFIX}" || exit 1
-      # Incorrect diagnostic due to action.
-      # REF: https://github.com/koalaman/shellcheck/wiki/SC2035
-      # shellcheck disable=SC2035
-      VS2019_DIR="$(find * -maxdepth 0 -type d -print -quit)"
-      if [ "${VS2019_DIR}" = "" ]; then
-        echo "没有 VS2019 MSVC 编译器"
-        exit 1
-      fi
-      cd - || exit 1
-      export VS2019_PREFIX="${VS2019_BASEPREFIX}${VS2019_DIR}\\"
 
-      WINSDK_BASE="/c/Program Files (x86)/Windows Kits/10/bin"
-      if [ -d "${WINSDK_BASE}" ]; then
-        for dir in "${WINSDK_BASE}"/*/; do
-          if [ -f "${dir}x86/rc.exe" ]; then
-            WINSDK_PATH_FOR_RC_EXE="${dir}x86"
-            WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE//\//\\}"
-            WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE/\\c\\/C:\\}"
-            break
-          fi
-        done
+if [ "$(unamer)" = "Windows" ]; then
+  # Configure Visual Studio environment. Requires:
+  # 1. choco install vswhere microsoft-build-tools visualcpp-build-tools nasm zip
+  # 2. iasl in PATH for MdeModulePkg
+  tools="${EDK_TOOLS_PATH}"
+  tools="${tools//\//\\}"
+  # For Travis CI
+  tools="${tools/\\c\\/C:\\}"
+  # For GitHub Actions
+  tools="${tools/\\d\\/D:\\}"
+  echo "将 EDK_TOOLS_PATH 从 ${EDK_TOOLS_PATH} 扩展到 ${tools}"
+  export EDK_TOOLS_PATH="${tools}"
+  export BASE_TOOLS_PATH="${tools}"
+  VS2019_BUILDTOOLS=$(vswhere -latest -version '[16.0,17.5)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+  VS2019_BASEPREFIX="${VS2019_BUILDTOOLS}\\VC\\Tools\\MSVC\\"
+  # Intended to use ls here to get first entry.
+  # REF: https://github.com/koalaman/shellcheck/wiki/SC2012
+  # shellcheck disable=SC2012
+  cd "${VS2019_BASEPREFIX}" || exit 1
+  # Incorrect diagnostic due to action.
+  # REF: https://github.com/koalaman/shellcheck/wiki/SC2035
+  # shellcheck disable=SC2035
+  VS2019_DIR="$(find * -maxdepth 0 -type d -print -quit)"
+  if [ "${VS2019_DIR}" = "" ]; then
+    echo "没有VS2019 MSVC编译器"
+    exit 1
+  fi
+  cd - || exit 1
+  export VS2019_PREFIX="${VS2019_BASEPREFIX}${VS2019_DIR}\\"
+
+  WINSDK_BASE="/c/Program Files (x86)/Windows Kits/10/bin"
+  if [ -d "${WINSDK_BASE}" ]; then
+    for dir in "${WINSDK_BASE}"/*/; do
+      if [ -f "${dir}x86/rc.exe" ]; then
+        WINSDK_PATH_FOR_RC_EXE="${dir}x86"
+        WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE//\//\\}"
+        WINSDK_PATH_FOR_RC_EXE="${WINSDK_PATH_FOR_RC_EXE/\\c\\/C:\\}"
+        break
       fi
-      if [ "${WINSDK_PATH_FOR_RC_EXE}" != "" ]; then
-        export WINSDK_PATH_FOR_RC_EXE
-      else
-        echo "找不到 rc.exe"
-        exit 1
-      fi
-      BASE_TOOLS="$(pwd)/BaseTools"
-      export PATH="${BASE_TOOLS}/Bin/Win32:${BASE_TOOLS}/BinWrappers/WindowsLike:$PATH"
-      # Extract header paths for cl.exe to work.
-      eval "$(python -c '
+    done
+  fi
+  if [ "${WINSDK_PATH_FOR_RC_EXE}" != "" ]; then
+    export WINSDK_PATH_FOR_RC_EXE
+  else
+    echo "无法找到rc.exe"
+    exit 1
+  fi
+  BASE_TOOLS="$(pwd)/BaseTools"
+  export PATH="${BASE_TOOLS}/Bin/Win32:${BASE_TOOLS}/BinWrappers/WindowsLike:$PATH"
+  # Extract header paths for cl.exe to work.
+  eval "$(python -c '
 import sys, os, subprocess
 import distutils.msvc9compiler as msvc
 msvc.find_vcvarsall=lambda _: sys.argv[1]
@@ -535,6 +547,12 @@ for k,v in envs.items():
     v = v.replace("'\''",r"'\'\\\'\''")
     print("export %(k)s='\''%(v)s'\''" % locals())
 ' "${VS2019_BUILDTOOLS}\\Common7\\Tools\\VsDevCmd.bat" '-arch=amd64')"
+fi
+
+if [ "$NEW_BUILDSYSTEM" != "1" ]; then
+  if [ "$SKIP_TESTS" != "1" ]; then
+    echo "测试..."
+    if [ "$(unamer)" = "Windows" ]; then
       # Normal build similar to Unix.
       cd BaseTools || exit 1
       nmake        || exit 1
