@@ -7,11 +7,15 @@ import re
 import sys
 import zipfile
 import logging
+import tempfile
+import shutil
 
 import pexpect
 
-TEST_LINUX_PATH = "./TestLinux"
-TESTCONSOLE_PATH = "./TestConsole"
+OCBUILD_PATH = os.path.dirname(os.path.realpath(__file__))
+TEST_LINUX_PATH = f"{OCBUILD_PATH}/TestLinux"
+TEST_WINPE_PATH = f"{OCBUILD_PATH}/winpe.iso"
+TESTCONSOLE_PATH = f"{OCBUILD_PATH}/TestConsole"
 
 
 def get_qemu_version() -> tuple:
@@ -32,7 +36,7 @@ def get_qemu_version() -> tuple:
     return version
 
 
-def test_firmware(fw_path: str, boot_drive_path: str, expected_string: str, timeout: int, rdrand: bool) -> bool:
+def test_firmware(fw_path: str, boot_drive_path: str, expected_string: str, timeout: int, rdrand: bool, fw_arch: str) -> bool:
     """
     Run QEMU and check whether firmware can start given image
 
@@ -45,19 +49,34 @@ def test_firmware(fw_path: str, boot_drive_path: str, expected_string: str, time
     """
     result = False
     qemu_version = get_qemu_version()
-    if rdrand:
-        if qemu_version is not None and qemu_version < (6, 2, 0):
-            p = pexpect.spawn('qemu-system-x86_64 -enable-kvm -display none -bios ' + fw_path +
-                              ' -machine q35 -m 2048 -cpu Penryn,+rdrand -smp 2 -usb -device usb-mouse '
-                              '-serial stdio ' + boot_drive_path)
-        else:
-            p = pexpect.spawn('qemu-system-x86_64 -display none -bios ' + fw_path +
-                              ' -machine q35 -m 2048 -cpu Penryn,+rdrand -smp 2 -usb -device usb-mouse '
-                              '-serial stdio ' + boot_drive_path)
+    if qemu_version is None:
+        logging.error("Can't retrieve QEMU version!")
+        return False
+
+    qemu_x86_runner = f"qemu-system-x86_64 {'-enable-kvm ' if qemu_version < (6, 2, 0) else ''}"
+    qemu_arm_runner = 'qemu-system-arm '
+    qemu_arm64_runner = 'qemu-system-aarch64 '
+    machine_string_x86 = f" -cpu Penryn{',+rdrand' if rdrand else ''} -smp 2 -machine q35 -m 2048 "
+    machine_string_arm = ' -cpu cortex-a15 -smp 2 -machine virt,highmem=off ' \
+                         ' -accel tcg,tb-size=1024 -m 2048 '
+    machine_string_arm64 = ' -cpu cortex-a53 -smp 2 -machine virt,virtualization=on ' \
+                           '-accel tcg,tb-size=1024 -m 2048 '
+    if fw_arch == "x86":
+        p = pexpect.spawn(qemu_x86_runner + machine_string_x86 +
+                          '-bios ' + fw_path + ' -display none -serial stdio '
+                          + boot_drive_path)
+    elif fw_arch == "arm":
+        p = pexpect.spawn(qemu_arm_runner + machine_string_arm +
+                          '-bios ' + fw_path + ' -display none -serial stdio '
+                          + boot_drive_path)
+    elif fw_arch == "arm64":
+        p = pexpect.spawn(qemu_arm64_runner + machine_string_arm64 +
+                          '-bios ' + fw_path + ' -display none -serial stdio '
+                          + boot_drive_path)
     else:
-        p = pexpect.spawn('qemu-system-x86_64 -display none -bios ' + fw_path +
-                          ' -machine q35 -m 2048 -cpu Penryn -smp 2 -usb -device usb-mouse '
-                          '-serial stdio ' + boot_drive_path)
+        logging.error("Unsupported arch specified!")
+        return False
+
     p.timeout = timeout
     res = p.expect([expected_string, pexpect.TIMEOUT])
     if res == 0:
@@ -84,7 +103,7 @@ def prepare_test_console(esp_path: str) -> bool:
         # Unpack TestConsole
         print("Preparing ESP with TestConsole")
         try:
-            with zipfile.ZipFile('./external/TestConsole.zip', 'r') as zip_ref:
+            with zipfile.ZipFile(f'{OCBUILD_PATH}/external/TestConsole.zip', 'r') as zip_ref:
                 zip_ref.extractall(esp_path)
         except Exception as e:
             logging.error("%s", e)
@@ -104,12 +123,22 @@ def prepare_test_linux_image(esp_path: str) -> bool:
         # Unpack TestLinux
         print("Preparing ESP with TestLinux")
         try:
-            with zipfile.ZipFile('./external/TestLinux.zip', 'r') as zip_ref:
+            with zipfile.ZipFile(f'{OCBUILD_PATH}/external/TestLinux.zip', 'r') as zip_ref:
                 zip_ref.extractall(esp_path)
         except Exception as e:
             logging.error("%s", e)
             return False
     return True
+
+
+def parse_fw_arch(fw_arch: str) -> str:
+    if fw_arch in ['i386', 'x86', 'IA32', 'X64', 'x64', 'x86_64', 'X86']:
+        return 'x86'
+    if fw_arch in ['arm', 'arm32', 'aarch32', 'AARCH32', 'ARM']:
+        return 'arm'
+    if fw_arch in ['AARCH64', 'aarch64', 'arm64', 'ARM64', 'AA64', 'aa64']:
+        return 'arm64'
+    return "Unknown"
 
 
 def main():
@@ -120,41 +149,64 @@ def main():
     parser.add_argument('--test-console-path', dest='user_testconsole_path', action='store')
     parser.add_argument('--test-linux-path', dest='user_testlinux_path', action='store')
     parser.add_argument('--test-linux', dest='test_linux', action='store_true')
+    parser.add_argument('--test-winpe-path', dest='user_testwinpe_path', action='store')
+    parser.add_argument('--test-winpe', dest='test_winpe', action='store_true')
+    parser.add_argument('--fw-arch', dest='fw_arch', action='store')
     parser.set_defaults(rdrand=True)
     parser.set_defaults(test_linux=False)
-    pexpect_timeout = 30  # default 30
+    parser.set_defaults(test_winpe=False)
+    parser.set_defaults(fw_arch="x86")
+    pexpect_timeout = 60  # default 30
     testconsole_path = TESTCONSOLE_PATH
     testlinux_path = TEST_LINUX_PATH
+    testwinpe_path = TEST_WINPE_PATH
 
     args = parser.parse_args()
     logging.basicConfig(
         format="%(asctime)-15s [%(levelname)s] %(funcName)s: %(message)s",
         level=logging.INFO)
 
+    fw_arch = parse_fw_arch(args.fw_arch)
+
     if not args.test_linux and args.user_testlinux_path:
         parser.error("--test-linux-path requires --test-linux")
+
+    if args.test_linux and args.test_winpe:
+        parser.error("you can't specify both --test-linux and --test-winpe simultaneously")
 
     if args.user_testlinux_path is not None:
         testlinux_path = args.user_testlinux_path
     elif args.user_testconsole_path is not None:
         testconsole_path = args.user_testconsole_path
+    elif args.user_testwinpe_path is not None:
+        testwinpe_path = args.user_testwinpe_path
 
-    if args.test_linux:
-        if not prepare_test_linux_image(testlinux_path):
+    # Use a temporary directory for the ESP to combat NvVars mixing and QEMU
+    # host directory corruption.
+    with tempfile.TemporaryDirectory() as temp_dir:
+        esp_dir = os.path.join(temp_dir, 'ESP')
+        boot_drive = '-hda fat:rw:' + esp_dir
+        if args.test_linux:
+            if not prepare_test_linux_image(testlinux_path):
+                sys.exit(1)
+            shutil.copytree(testlinux_path, esp_dir)
+            expected_string = 'Hello World!'
+            pexpect_timeout = 180
+        elif args.test_winpe:
+            os.makedirs(esp_dir)
+            boot_drive += ' -cdrom ' + testwinpe_path
+            expected_string = 'EVENT: The CMD command is now available'
+            pexpect_timeout = 210
+        else:
+            if not prepare_test_console(testconsole_path):
+                sys.exit(1)
+            shutil.copytree(testconsole_path, esp_dir)
+            expected_string = 'GPT entry is not accessible'
+        print("Testing ...")
+        if test_firmware(args.fw_path, boot_drive, expected_string, pexpect_timeout, args.rdrand, fw_arch):
+            sys.exit(0)
+        else:
             sys.exit(1)
-        boot_drive = '-hda fat:rw:' + testlinux_path
-        expected_string = 'Hello World!'
-        pexpect_timeout = 120
-    else:
-        if not prepare_test_console(testconsole_path):
-            sys.exit(1)
-        boot_drive = '-hda fat:rw:' + testconsole_path
-        expected_string = 'Partition #3 GPT entry is not accessible'
-    print("Testing ...")
-    if test_firmware(args.fw_path, boot_drive, expected_string, pexpect_timeout, args.rdrand):
-        sys.exit(0)
-    else:
-        sys.exit(1)
 
 
 if __name__ == '__main__':

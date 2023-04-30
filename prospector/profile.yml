@@ -1,0 +1,32 @@
+output-format: grouped
+strictness: veryhigh
+test-warnings: true
+member-warnings: true
+autodetect: true
+
+pylint:
+  disable:
+    - broad-except
+    - line-too-long
+    - too-many-public-methods
+    - too-many-statements
+    - invalid-name
+    - too-many-arguments
+    - too-many-locals
+  load-plugins:
+    - pylint.extensions.no_self_use
+  run: true
+
+pycodestyle:
+  disable:
+    - E501
+  run: true
+
+dodgy:
+  run: true
+
+mccabe:
+  run: false
+
+pyflakes:
+  run: false
