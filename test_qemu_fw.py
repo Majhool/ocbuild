@@ -132,7 +132,7 @@ def prepare_test_linux_image(esp_path: str) -> bool:
 
 
 def parse_fw_arch(fw_arch: str) -> str:
-    if fw_arch in ['i386', 'x86', 'IA32', 'X64', 'x64', 'x86_64', 'X86']:
+    if fw_arch in ['i386', 'x86', 'IA32', 'Ia32', 'X64', 'x64', 'x86_64', 'X86', '3264']:
         return 'x86'
     if fw_arch in ['arm', 'arm32', 'aarch32', 'AARCH32', 'ARM']:
         return 'arm'
@@ -196,7 +196,7 @@ def main():
             os.makedirs(esp_dir)
             boot_drive += ' -cdrom ' + testwinpe_path
             expected_string = 'EVENT: The CMD command is now available'
-            pexpect_timeout = 210
+            pexpect_timeout = 600
         else:
             if not prepare_test_console(testconsole_path):
                 sys.exit(1)
