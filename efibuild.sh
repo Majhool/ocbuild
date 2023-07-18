@@ -104,7 +104,8 @@ buildme() {
   build "$@" &>build.log & > /dev/null
   cmd_pid=$!
 
-  star $!  build "$@" &
+  star $!
+  build "$@" &
   mon_pid=$!
 
   ## ShellCheck Exception(s)
@@ -123,7 +124,8 @@ gitme() {
   cmd_pid=$!
   trap "kill -9 $cmd_pid" INT
 
-  star $!  git "$@" & >/dev/null
+  star $!
+  git "$@" & >/dev/null
   mon_pid=$!
 
   ## ShellCheck Exception(s)
@@ -140,7 +142,8 @@ makeme() {
   make "$@" &>make.log & > /dev/null
   cmd_pid=$!
 
-  star $!  make "$@" &
+  star $!
+  make "$@" &
   mon_pid=$!
 
   ## ShellCheck Exception(s)
@@ -354,7 +357,7 @@ if [ "${TOOLCHAINS[*]}" = "" ]; then
   elif [ "$(unamer)" = "Windows" ]; then
     TOOLCHAINS=('VS2019')
   else
-    TOOLCHAINS=('CLANGPDB' 'GCC5')
+    TOOLCHAINS=('CLANGPDB' 'GCC')
   fi
 fi
 
