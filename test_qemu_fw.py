@@ -36,17 +36,18 @@ def get_qemu_version() -> tuple:
     return version
 
 
-def test_firmware(fw_path: str, boot_drive_path: str, expected_string: str, timeout: int, rdrand: bool, fw_arch: str) -> bool:
+def test_firmware(args, boot_drive_path: str, expected_string: str, timeout: int) -> bool:
     """
     Run QEMU and check whether firmware can start given image
 
-    :param fw_path: The path points to the firmware to run (OVMF)
+    :param args.fw_path: The path points to the firmware to run (OVMF)
     :param boot_drive_path: The path points to ESP or raw image to boot from
     :param expected_string: The expected string we wait for during image run
     :param timeout: Timeout for image run
-    :param rdrand: Run with rdrand support or not
+    :param args.rdrand: Run with rdrand support or not
     :return the boolean result:
     """
+    fw_arch = parse_fw_arch(args.fw_arch)
     result = False
     qemu_version = get_qemu_version()
     if qemu_version is None:
@@ -56,22 +57,21 @@ def test_firmware(fw_path: str, boot_drive_path: str, expected_string: str, time
     qemu_x86_runner = f"qemu-system-x86_64 {'-enable-kvm ' if qemu_version < (6, 2, 0) else ''}"
     qemu_arm_runner = 'qemu-system-arm '
     qemu_arm64_runner = 'qemu-system-aarch64 '
-    machine_string_x86 = f" -cpu Penryn{',+rdrand' if rdrand else ''} -smp 2 -machine q35 -m 2048 "
+    machine_string_x86 = f" -cpu Penryn,+smep,+smap{',+rdrand' if args.rdrand else ''} -smp 2 -machine q35 -m 2048 "
     machine_string_arm = ' -cpu cortex-a15 -smp 2 -machine virt,highmem=off ' \
                          ' -accel tcg,tb-size=1024 -m 2048 '
-    machine_string_arm64 = ' -cpu cortex-a53 -smp 2 -machine virt,virtualization=on ' \
-                           '-accel tcg,tb-size=1024 -m 2048 '
+    machine_string_arm64 = f" -cpu cortex-a76 -smp 2 -machine virt{',virtualization=on' if args.test_winpe else ''} -accel tcg,tb-size=1024 -m 2048 "
     if fw_arch == "x86":
         p = pexpect.spawn(qemu_x86_runner + machine_string_x86 +
-                          '-bios ' + fw_path + ' -display none -serial stdio '
+                          '-bios ' + args.fw_path + ' -display none -serial stdio '
                           + boot_drive_path)
     elif fw_arch == "arm":
         p = pexpect.spawn(qemu_arm_runner + machine_string_arm +
-                          '-bios ' + fw_path + ' -display none -serial stdio '
+                          '-bios ' + args.fw_path + ' -display none -serial stdio '
                           + boot_drive_path)
     elif fw_arch == "arm64":
         p = pexpect.spawn(qemu_arm64_runner + machine_string_arm64 +
-                          '-bios ' + fw_path + ' -display none -serial stdio '
+                          '-bios ' + args.fw_path + ' -display none -serial stdio '
                           + boot_drive_path)
     else:
         logging.error("Unsupported arch specified!")
@@ -166,8 +166,6 @@ def main():
         format="%(asctime)-15s [%(levelname)s] %(funcName)s: %(message)s",
         level=logging.INFO)
 
-    fw_arch = parse_fw_arch(args.fw_arch)
-
     if not args.test_linux and args.user_testlinux_path:
         parser.error("--test-linux-path requires --test-linux")
 
@@ -185,7 +183,7 @@ def main():
     # host directory corruption.
     with tempfile.TemporaryDirectory() as temp_dir:
         esp_dir = os.path.join(temp_dir, 'ESP')
-        boot_drive = '-hda fat:rw:' + esp_dir
+        boot_drive = '-drive format=raw,file=fat:rw:' + esp_dir
         if args.test_linux:
             if not prepare_test_linux_image(testlinux_path):
                 sys.exit(1)
@@ -194,7 +192,7 @@ def main():
             pexpect_timeout = 180
         elif args.test_winpe:
             os.makedirs(esp_dir)
-            boot_drive += ' -cdrom ' + testwinpe_path
+            boot_drive = ' -cdrom ' + testwinpe_path
             expected_string = 'EVENT: The CMD command is now available'
             pexpect_timeout = 600
         else:
@@ -203,7 +201,7 @@ def main():
             shutil.copytree(testconsole_path, esp_dir)
             expected_string = 'GPT entry is not accessible'
         print("Testing ...")
-        if test_firmware(args.fw_path, boot_drive, expected_string, pexpect_timeout, args.rdrand, fw_arch):
+        if test_firmware(args, boot_drive, expected_string, pexpect_timeout):
             sys.exit(0)
         else:
             sys.exit(1)
