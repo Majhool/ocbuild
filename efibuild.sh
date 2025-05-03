@@ -135,7 +135,7 @@ buildme() {
   cmd_pid=$!
 
   # 启动进度显示
-  star $cmd_pid "Building" &
+  star $cmd_pid "正在编译" &
   mon_pid=$!
 
   # 等待构建完成
@@ -193,7 +193,7 @@ makeme() {
   cmd_pid=$!
 
   # 启动进度显示
-  star $cmd_pid "Making" &
+  star $cmd_pid "正在构建" &
   mon_pid=$!
 
   # 等待 make 完成
@@ -647,7 +647,7 @@ cd .. || exit 1
 echo -e "****************************************************************\n"
 if [ "$(type -t package)" = "function" ]; then
   if [ "$SKIP_PACKAGE" != "1" ]; then
-    echo "打包中..."
+    echo "开始打包..."
     if [ "$NO_ARCHIVES" != "1" ]; then
       rm -f Binaries/*.zip
     fi
