@@ -618,6 +618,7 @@ if [ "$NEW_BUILDSYSTEM" != "1" ]; then
       makeme -C BaseTools -j || exit 1
     fi
     touch UDK.ready
+      echo -e "\n构建完成!!"
       echo -e "----------------------------------------------------------------\n"
   fi
 fi
