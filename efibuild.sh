@@ -94,20 +94,21 @@ pingme() {
   }
 
 star(){
-i=0;
-str=""
-arr=("|" "/" "-" "\\")
-while true
-do
-  let index=i%4
-  let indexcolor=i%8
-  let color=30+indexcolor
-  printf ">%-s %c\r" "" "" "${arr[$index]}"
-  sleep 0.2
-  let i++
-  str+='#'
-done
-printf "\n"
+  i=0;
+  str=""
+  arr=("|" "/" "-" "\\")
+  trap 'exit 0' SIGTERM
+  while true
+  do
+    let index=i%4
+    let indexcolor=i%8
+    let color=30+indexcolor
+    printf ">%-s %c\r" "" "" "${arr[$index]}"
+    sleep 0.2
+    let i++
+    str+='#'
+  done
+  printf "\n"
 }
 
 buildme() {
@@ -118,13 +119,10 @@ buildme() {
   build "$@" &>build.log & > /dev/null
   cmd_pid=$!
 
-  star $!  build "$@" &
+  star $!  build "$@" & >/dev/null 2>&1
   mon_pid=$!
 
-  ## ShellCheck Exception(s)
-  ## https://github.com/koalaman/shellcheck/wiki/SC2069
-  # shellcheck disable=SC2069
-  { wait $cmd_pid 2>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill $mon_pid; } || return 1
+  { wait $cmd_pid 2>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill -s SIGTERM $mon_pid 2>/dev/null; } || return 1
   return $result
 }
 
@@ -137,13 +135,10 @@ gitme() {
   cmd_pid=$!
   trap "kill -9 $cmd_pid" INT
 
-  star $!  git "$@" & >/dev/null
+  star $!  git "$@" & >/dev/null 2>&1
   mon_pid=$!
 
-  ## ShellCheck Exception(s)
-  ## https://github.com/koalaman/shellcheck/wiki/SC2069
-  # shellcheck disable=SC2069
-  { wait $cmd_pid &>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill $mon_pid 2>&1>/dev/null; } || return 1
+  { wait $cmd_pid &>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill -s SIGTERM $mon_pid 2>/dev/null; } || return 1
   return $result
 }
 makeme() {
