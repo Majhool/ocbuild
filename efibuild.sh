@@ -94,35 +94,59 @@ pingme() {
   }
 
 star(){
-  i=0;
-  str=""
-  arr=("|" "/" "-" "\\")
-  trap 'exit 0' SIGTERM
-  while true
-  do
+  local cmd_pid=$1
+  local cmd_name=$2
+  local i=0
+  local arr=("|" "/" "-" "\\")
+  local dots=""
+  trap 'exit 0' SIGTERM SIGINT
+  
+  while true; do
+    if ! ps -p $cmd_pid > /dev/null 2>&1; then
+      break
+    fi
+    
     let index=i%4
-    let indexcolor=i%8
-    let color=30+indexcolor
-    printf ">%-s %c\r" "" "" "${arr[$index]}"
+    printf "\r[%s] %s %s" "${arr[$index]}" "$cmd_name" "$dots"
     sleep 0.2
     let i++
-    str+='#'
+    if [ $i -eq 4 ]; then
+      dots="$dots."
+      if [ ${#dots} -gt 3 ]; then
+        dots=""
+      fi
+      i=0
+    fi
   done
-  printf "\n"
+  printf "\r%s\r" "$(printf ' %.0s' {1..80})"
 }
 
 buildme() {
   local cmd_pid
   local mon_pid
   local result
+  local build_cmd="build $*"
 
-  build "$@" &>build.log & > /dev/null
+  # 设置信号处理
+  trap 'kill -TERM $cmd_pid $mon_pid 2>/dev/null; exit 1' INT TERM
+
+  # 启动构建进程
+  $build_cmd &>build.log &
   cmd_pid=$!
 
-  star $!  build "$@" & >/dev/null 2>&1
+  # 启动进度显示
+  star $cmd_pid "Building" &
   mon_pid=$!
 
-  { wait $cmd_pid 2>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill -s SIGTERM $mon_pid 2>/dev/null; } || return 1
+  # 等待构建完成
+  wait $cmd_pid 2>/dev/null
+  result=$?
+
+  # 清理进度显示
+  if ps -p $mon_pid > /dev/null 2>&1; then
+    kill -TERM $mon_pid 2>/dev/null
+  fi
+
   return $result
 }
 
@@ -130,32 +154,57 @@ gitme() {
   local cmd_pid
   local mon_pid
   local result
+  local git_cmd="git $*"
 
-  git "$@" &>/dev/null &
+  # 设置信号处理
+  trap 'kill -TERM $cmd_pid $mon_pid 2>/dev/null; exit 1' INT TERM
+
+  # 启动 git 进程
+  $git_cmd &>/dev/null &
   cmd_pid=$!
-  trap "kill -9 $cmd_pid" INT
 
-  star $!  git "$@" & >/dev/null 2>&1
+  # 启动进度显示
+  star $cmd_pid "Git" &
   mon_pid=$!
 
-  { wait $cmd_pid &>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill -s SIGTERM $mon_pid 2>/dev/null; } || return 1
+  # 等待 git 完成
+  wait $cmd_pid 2>/dev/null
+  result=$?
+
+  # 清理进度显示
+  if ps -p $mon_pid > /dev/null 2>&1; then
+    kill -TERM $mon_pid 2>/dev/null
+  fi
+
   return $result
 }
+
 makeme() {
   local cmd_pid
   local mon_pid
   local result
+  local make_cmd="make $*"
 
-  make "$@" &>make.log & > /dev/null
+  # 设置信号处理
+  trap 'kill -TERM $cmd_pid $mon_pid 2>/dev/null; exit 1' INT TERM
+
+  # 启动 make 进程
+  $make_cmd &>make.log &
   cmd_pid=$!
 
-  star $!  make "$@" &
+  # 启动进度显示
+  star $cmd_pid "Making" &
   mon_pid=$!
 
-  ## ShellCheck Exception(s)
-  ## https://github.com/koalaman/shellcheck/wiki/SC2069
-  # shellcheck disable=SC2069
-  { wait $cmd_pid &>/dev/null; result=$?; ps -p$mon_pid 2>&1>/dev/null && kill $mon_pid 2>&1>/dev/null; } || return 1
+  # 等待 make 完成
+  wait $cmd_pid 2>/dev/null
+  result=$?
+
+  # 清理进度显示
+  if ps -p $mon_pid > /dev/null 2>&1; then
+    kill -TERM $mon_pid 2>/dev/null
+  fi
+
   return $result
 }
 
